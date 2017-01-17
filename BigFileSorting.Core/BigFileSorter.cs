@@ -10,13 +10,15 @@ using System.Numerics;
 
 namespace BigFileSorting.Core
 {
-    public class BigFileSorter<TNumber> where TNumber : struct, IComparable<TNumber>
+    public class BigFileSorter<TNumber> where TNumber : struct, IComparable<TNumber>, IEquatable<TNumber>
     {
         public async Task Sort(
             string sourceFilePath,
             string targetDir,
             IReadOnlyCollection<string> tempDirs,
             int fileReadBufferSize,
+            int segmentSize,
+            Encoding encoding,
             CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(sourceFilePath))
@@ -34,18 +36,14 @@ namespace BigFileSorting.Core
                 throw new ArgumentNullException(nameof(tempDirs));
             }
 
-            if (cancellationToken == null)
-            {
-                throw new ArgumentNullException(nameof(cancellationToken));
-            }
-
             // check temp dirs
             tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs, cancellationToken);
 
             //read source file, devide into segments, sort segments in the memory, put segments into temp files on temp directories
-            using (var fileReader = new FileReader<TNumber>(sourceFilePath, fileReadBufferSize))
+            using (var fileReader = new BigFileReader<TNumber>(sourceFilePath, fileReadBufferSize, segmentSize, encoding, cancellationToken))
             {
-
+                var segment = await fileReader.ReadSegment();
+                segment.Sort();
             } 
         }
     }

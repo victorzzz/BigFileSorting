@@ -58,10 +58,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BigFileReader.cs" />
     <Compile Include="BigFileSorter.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Exceptions\InvalidFileException.cs" />
-    <Compile Include="FileReader.cs" />
     <Compile Include="FileRecord.cs" />
     <Compile Include="NumberMethodInfo.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
