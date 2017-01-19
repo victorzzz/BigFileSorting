@@ -67,6 +67,7 @@
     <Compile Include="FileRecord.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TempDirectoryHelper.cs" />
+    <Compile Include="Utils\StringExtension.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
