@@ -49,6 +49,8 @@ namespace BigFileSorting.Core
                 aproxCapacity = (int)(m_SegmentSize / Constants.APROXIMATE_RECORD_SIZE);
             }
 
+            //int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(FileRecord));
+
             var result = new List<FileRecord>(capacity: aproxCapacity);
             while (true)
             {

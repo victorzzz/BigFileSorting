@@ -94,7 +94,22 @@ namespace BigFileSorting.Core
                     read_sw.Stop();
 
                     sort_sw.Start();
+                    /*
+                    segment.Sort((FileRecord r1, FileRecord r2) =>
+                    {
+                        if (r1.Number < r2.Number)
+                        {
+                            return -1;
+                        }
 
+                        if (r1.Number > r2.Number)
+                        {
+                            return 1;
+                        }
+
+                        return string.Compare(r1.Str, r2.Str, StringComparison.Ordinal);
+                    });
+                    */
 
                     segment.Sort();
 
