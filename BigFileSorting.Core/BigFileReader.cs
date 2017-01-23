@@ -6,6 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using BigFileSorting.Core.Exceptions;
+using BigFileSorting.Core.Utils;
 
 namespace BigFileSorting.Core
 {
@@ -30,12 +31,12 @@ namespace BigFileSorting.Core
 
         private bool disposedValue; // To detect redundant calls for 'Dispose'
 
-        public BigFileReader(string filePath, int bufferSize, long segmentSize, Encoding encoding, CancellationToken cancellationToken)
+        public BigFileReader(string filePath, long segmentSize, Encoding encoding, CancellationToken cancellationToken)
         {
             m_CancellationToken = cancellationToken;
             m_SegmentSize = segmentSize;
 
-            m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous | FileOptions.SequentialScan);
             m_StreamReader = new StreamReader(m_FileStream, encoding);
         }
 
@@ -73,30 +74,21 @@ namespace BigFileSorting.Core
 
         private async Task<ReadRecordResult?> ReadRecord()
         {
+            if (m_StreamReader.EndOfStream)
+            {
+                return null;
+            }
+
             var line = await m_StreamReader.ReadLineAsync().ConfigureAwait(false);
             if (line == null)
             {
                 return null;
             }
 
-            var dotIndex = line.IndexOf('.');
-            if (dotIndex <= 0)
-            {
-                throw new InvalidFileException("Character '.' absent or placed in the first position");
-            }
+            int dotPosition;
+            ulong parsedNumber = line.ParseULongToDelimiter('.', out dotPosition);
 
-            var numberStrToParse = line.Substring(0, dotIndex);
-
-            long parsedNumber;
-            var parseResult = long.TryParse(numberStrToParse, out parsedNumber);
-            if (!parseResult)
-            {
-                throw new InvalidFileException("Can't parse 'Number'");
-            }
-
-            var str = line.Substring(dotIndex + 1);
-
-            return new ReadRecordResult(new FileRecord(parsedNumber, str), line.Length * 2);
+            return new ReadRecordResult(new FileRecord(parsedNumber, line.Substring(dotPosition + 1)), line.Length * 2);
         }
 
         #region IDisposable Support

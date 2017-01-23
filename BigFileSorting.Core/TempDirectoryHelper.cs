@@ -38,7 +38,7 @@ namespace BigFileSorting.Core
             return result;
         }
 
-        internal static IReadOnlyCollection<string> TempDirsToUse(IReadOnlyCollection<string> tempDirs, CancellationToken cancellationToken)
+        internal static IReadOnlyList<string> TempDirsToUse(IReadOnlyList<string> tempDirs, CancellationToken cancellationToken)
         {
             if (tempDirs.Count == 0)
             {
@@ -55,8 +55,8 @@ namespace BigFileSorting.Core
             }
             else
             {
-                // if the only one temporary directory provided thate we use two temp files
-                tempDirs = new List<string>() { tempDirs.First(), tempDirs.First() };
+                // if the only one temporary directory provided than we use three temp files in the same directory
+                tempDirs = new List<string> { tempDirs.First(), tempDirs.First(), tempDirs.First() };
             }
 
             return tempDirs;

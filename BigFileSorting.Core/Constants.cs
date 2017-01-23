@@ -9,6 +9,7 @@ namespace BigFileSorting.Core
     internal static class Constants
     {
         public const int APROXIMATE_RECORD_SIZE = 128;
+        public const int FILE_BUFFER_SIZE = 1024 * 1024 * 4; // 4 Mb
 
     }
 }

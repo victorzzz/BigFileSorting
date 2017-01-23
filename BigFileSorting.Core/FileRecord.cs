@@ -10,21 +10,18 @@ using BigFileSorting.Core.Utils;
 namespace BigFileSorting.Core
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal struct FileRecord : IComparable<FileRecord>, IEquatable<FileRecord>
+    internal struct FileRecord : IComparable<FileRecord>
     {
         public ulong Number { get; }
-        public string LineString { get; }
+        public string Str { get; }
 
-        public int StrStartPosition { get; }
-
-        public FileRecord(ulong number, string lineString, int strStartPosition)
+        public FileRecord(ulong number, string str)
         {
             Number = number;
-            LineString = lineString;
-            StrStartPosition = strStartPosition;
+            Str = str;
         }
 
-        int IComparable<FileRecord>.CompareTo(FileRecord other)
+        public int CompareTo(FileRecord other)
         {
             if (Number < other.Number)
             {
@@ -36,12 +33,7 @@ namespace BigFileSorting.Core
                 return 1;
             }
 
-            LineString.
-        }
-
-        bool IEquatable<FileRecord>.Equals(FileRecord other)
-        {
-            return Number == other.Number && Str.Equals(other.Str, StringComparison.Ordinal);
+            return String.CompareOrdinal(Str, other.Str);
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BigFileSorting.Core.Exceptions;
 
 namespace BigFileSorting.Core.Utils
 {
@@ -60,9 +61,38 @@ namespace BigFileSorting.Core.Utils
             return 0;
         }
 
-        public static ulong ParseULongToPosition(int stopPosition)
+        public static ulong ParseULongToDelimiter(this string str, char delimiter, out int delimiterPosition)
         {
+            if (str[0] == delimiter)
+            {
+                throw new InvalidFileException("'.' - first character in a line");
+            }
 
+            ulong result = 0;
+            delimiterPosition = 0;
+            for (int i = 0; i < str.Length-1; ++i)
+            {
+                var c = str[i];
+                if (c == delimiter)
+                {
+                    delimiterPosition = i;
+                    break;
+                }
+
+                if (c < '0' || c > '9')
+                {
+                    throw new InvalidFileException("Non-digit character before '.'");
+                }
+
+                result = result * 10ul + (ulong)(c - '0');
+            }
+
+            if (delimiterPosition == 0)
+            {
+                throw new InvalidFileException("No '.' was found for a line");
+            }
+
+            return result;
         }
     }
 }
