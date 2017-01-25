@@ -249,9 +249,7 @@ namespace BigFileSorting.Core
             }
         }
 
-        #region IDisposable Support
-
-        private async Task FlushDataAndDisposeFiles()
+        public async Task FlushDataAndDisposeFiles()
         {
             await Task.WhenAll(
                 m_DataFile.FlushAsync(m_CancellationToken),
@@ -264,6 +262,8 @@ namespace BigFileSorting.Core
             m_DataFile = null;
             m_SegmentIndexFile = null;
         }
+
+        #region IDisposable Support
 
         protected virtual void Dispose(bool disposing)
         {

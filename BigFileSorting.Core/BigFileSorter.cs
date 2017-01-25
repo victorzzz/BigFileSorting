@@ -145,6 +145,14 @@ namespace BigFileSorting.Core
                         targetFile.SwitchToNewFileAsync(),
                         t.SwitchToReadModeAsync()).ConfigureAwait(false);
                 }
+
+                // Dispose will also call 'FlushDataAndDisposeFiles'
+                // But here, we do it in parallel
+                await Task.WhenAll(
+                    tempFile0.FlushDataAndDisposeFiles(),
+                    tempFile1.FlushDataAndDisposeFiles(),
+                    tempFile2.FlushDataAndDisposeFiles()
+                    ).ConfigureAwait(false);
             }
 
             return new Tuple<long, long, long>(

@@ -12,7 +12,7 @@ namespace BigFileSorting.Core
         public ulong Number { get; }
         public byte[] StrAsByteArray { get; private set; }
 
-        private string Str;
+        public string Str { get; private set; }
 
         public SegmentedFileRecord(ulong number, byte[] strAsByteArray)
         {
