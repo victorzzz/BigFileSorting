@@ -14,24 +14,45 @@ namespace BigFileSorting.Core
 
         private bool disposedValue = false; // To detect redundant calls
 
+        private readonly string m_TempDir;
+
         private FileStream m_DataFile;
         private FileStream m_SegmentIndexFile;
 
         private bool m_ReadMode = false;
         private long m_NextSegmenPosition = 0;
+        private int m_NumberOfSegments = 0;
 
         private readonly Encoding m_Encoding;
 
-        private readonly string m_DataFilePah;
-        private readonly string m_IndexFilePath;
+        private string m_DataFilePah;
+        private string m_IndexFilePath;
 
         private CancellationToken m_CancellationToken;
 
+        public int NumberOfSegments { get
+            {
+                return m_NumberOfSegments;
+            }
+        }
+
         public TempSegmentedFile(string tempDir, Encoding encoding, CancellationToken cancellationToken)
         {
+            m_TempDir = tempDir;
             m_Encoding = encoding;
+            m_CancellationToken = cancellationToken;
+        }
 
-            m_DataFilePah = Path.Combine(tempDir, Path.GetRandomFileName());
+        public async Task SwitchToNewFileAsync()
+        {
+            if (m_DataFilePah != null && !m_ReadMode)
+            {
+                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToNewFileAsync' was called in write mode.");
+            }
+
+            await FlushDataAndDisposeFiles().ConfigureAwait(false);
+
+            m_DataFilePah = Path.Combine(m_TempDir, Path.GetRandomFileName());
 
             m_DataFile = new FileStream(
                 m_DataFilePah,
@@ -52,8 +73,18 @@ namespace BigFileSorting.Core
                 FileOptions.Asynchronous);
 
             m_ReadMode = false;
+            m_NextSegmenPosition = 0;
+            m_NumberOfSegments = 0;
+        }
 
-            m_CancellationToken = cancellationToken;
+        public async Task WriteFakeSegmentAsync()
+        {
+            if (m_ReadMode)
+            {
+                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.WriteFakeSegmentAsync' was called in read mode.");
+            }
+
+            await EndSegmentAsync().ConfigureAwait(false);
         }
 
         public async Task WriteSortedSegmentAsync(List<FileRecord> segment)
@@ -91,6 +122,8 @@ namespace BigFileSorting.Core
         {
             long pos = m_DataFile.Position;
             await m_SegmentIndexFile.WriteAsync(BitConverter.GetBytes(pos), 0, 8, m_CancellationToken).ConfigureAwait(false);
+
+            ++m_NumberOfSegments;
         }
 
         public async Task SwitchToReadModeAsync()
@@ -100,13 +133,7 @@ namespace BigFileSorting.Core
                 throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToReadModeAsync' was called in read mode.");
             }
 
-            await Task.WhenAll(
-                m_DataFile.FlushAsync(m_CancellationToken),
-                m_SegmentIndexFile.FlushAsync(m_CancellationToken)
-                ).ConfigureAwait(false);
-
-            m_DataFile.Dispose();
-            m_SegmentIndexFile.Dispose();
+            await FlushDataAndDisposeFiles().ConfigureAwait(false);
 
             m_DataFile = new FileStream(
                 m_DataFilePah,
@@ -148,6 +175,8 @@ namespace BigFileSorting.Core
             }
 
             m_NextSegmenPosition = BitConverter.ToInt64(nextSegmentPosBuffer, 0);
+            --m_NumberOfSegments;
+
             return true;
         }
 
@@ -222,16 +251,27 @@ namespace BigFileSorting.Core
 
         #region IDisposable Support
 
+        private async Task FlushDataAndDisposeFiles()
+        {
+            await Task.WhenAll(
+                m_DataFile.FlushAsync(m_CancellationToken),
+                m_SegmentIndexFile.FlushAsync(m_CancellationToken)
+                ).ConfigureAwait(false);
+
+            m_DataFile.Dispose();
+            m_SegmentIndexFile.Dispose();
+
+            m_DataFile = null;
+            m_SegmentIndexFile = null;
+        }
+
         protected virtual void Dispose(bool disposing)
         {
             if (!disposedValue)
             {
                 if (disposing)
                 {
-                    m_DataFile.Dispose();
-                    m_DataFile = null;
-                    m_SegmentIndexFile.Dispose();
-                    m_SegmentIndexFile = null;
+                    FlushDataAndDisposeFiles().Wait();
 
                     if (!m_ReadMode)
                     {

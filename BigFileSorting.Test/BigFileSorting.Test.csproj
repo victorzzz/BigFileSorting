@@ -54,6 +54,7 @@
   </Choose>
   <ItemGroup>
     <Compile Include="BigFileSorterTest.cs" />
+    <Compile Include="FibonachiSegmentsDistributionTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

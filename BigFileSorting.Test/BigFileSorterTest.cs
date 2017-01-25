@@ -17,7 +17,7 @@ namespace BigFileSorting.Test
         private const long TEST_FILE_SIZE = 1024L * 1024L * 1024L * 5L; //5 GB
 
         [TestInitialize]
-        public async void TestInitialize()
+        public void TestInitialize()
         {
             if(!File.Exists(BIG_SOURCE_FILE_PATH))
             {
@@ -35,7 +35,7 @@ namespace BigFileSorting.Test
                 Encoding.Unicode, 
                 CancellationToken.None).ConfigureAwait(false);
 
-            Assert.AreEqual(r, new Tuple<long, long>(0,0));
+            Assert.AreEqual(r, new Tuple<long, long, long>(0,0,0));
         }
     }
 }

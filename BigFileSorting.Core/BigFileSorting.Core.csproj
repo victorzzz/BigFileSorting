@@ -56,6 +56,8 @@
     <Compile Include="TempDirectoryHelper.cs" />
     <Compile Include="TempSegmentedFile.cs" />
     <Compile Include="SegmentedFileRecord.cs" />
+    <Compile Include="Utils\FibonachiSegmentsDistribution.cs" />
+    <Compile Include="Utils\Memory.cs" />
     <Compile Include="Utils\StringExtension.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

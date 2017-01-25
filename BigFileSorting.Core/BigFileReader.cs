@@ -40,7 +40,12 @@ namespace BigFileSorting.Core
             m_StreamReader = new StreamReader(m_FileStream, encoding);
         }
 
-        public async Task<List<FileRecord>> ReadSegment()
+        public bool EndOfFile()
+        {
+            return m_StreamReader.EndOfStream;
+        }
+
+        public async Task<List<FileRecord>> ReadSegmentAsync()
         {
             long resultSize = 0;
 
@@ -55,7 +60,7 @@ namespace BigFileSorting.Core
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
 
-                var readRecordResult = await ReadRecord().ConfigureAwait(false);
+                var readRecordResult = await ReadRecordAsync().ConfigureAwait(false);
                 if (!readRecordResult.HasValue)
                 {
                     return result;
@@ -72,7 +77,7 @@ namespace BigFileSorting.Core
             }
         }
 
-        private async Task<ReadRecordResult?> ReadRecord()
+        private async Task<ReadRecordResult?> ReadRecordAsync()
         {
             if (m_StreamReader.EndOfStream)
             {
