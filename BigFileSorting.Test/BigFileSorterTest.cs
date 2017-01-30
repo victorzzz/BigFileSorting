@@ -14,7 +14,8 @@ namespace BigFileSorting.Test
     public class BigFileSorterTest
     {
         private const string BIG_SOURCE_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.txt";
-        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024L * 5L; //5 GB
+        private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
+        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024L * 1L; //10 GB
 
         [TestInitialize]
         public void TestInitialize()
@@ -28,14 +29,13 @@ namespace BigFileSorting.Test
         [TestMethod]
         public async Task Sort()
         {
-            var r = await BigFileSorter.Sort(
+            await BigFileSorterNew.Sort(
                 BIG_SOURCE_FILE_PATH,
-                @"d:\testtemp",
+                BIG_DESTINATION_FILE_PATH,
                 new List<string>() { @"d:\testtemp" },
                 Encoding.Unicode, 
                 CancellationToken.None).ConfigureAwait(false);
 
-            Assert.AreEqual(r, new Tuple<long, long, long>(0,0,0));
         }
     }
 }

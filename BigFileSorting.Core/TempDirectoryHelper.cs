@@ -48,7 +48,7 @@ namespace BigFileSorting.Core
             // Check temp directories. It should be placed on different devices
             if (tempDirs.Count > 1)
             {
-                if (!TempDirectoryHelper.CheckRootPathUniqueness(tempDirs, cancellationToken))
+                if (!CheckRootPathUniqueness(tempDirs, cancellationToken))
                 {
                     throw new InvalidOperationException("Temp dirs should have unique root paths!");
                 }
@@ -56,7 +56,7 @@ namespace BigFileSorting.Core
             else
             {
                 // if the only one temporary directory provided than we use three temp files in the same directory
-                tempDirs = new List<string> { tempDirs.First(), tempDirs.First(), tempDirs.First() };
+                tempDirs = new List<string> { tempDirs.First(), tempDirs.First() };
             }
 
             return tempDirs;

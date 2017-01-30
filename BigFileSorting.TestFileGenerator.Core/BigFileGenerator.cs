@@ -9,7 +9,7 @@ namespace BigFileSorting.TestFileGenerator.Core
 {
     public static class BigFileGenerator
     {
-        private const int WRITE_FILE_BUFFER = 1024 * 1024 * 4;
+        private const int WRITE_FILE_BUFFER = 1024 * 1024 * 256;
         private const int NUMBER_OF_UNIQUE_STRINGS = 10;
 
         public static async Task Generate(string filePath, long size, Encoding encoding)
@@ -19,7 +19,7 @@ namespace BigFileSorting.TestFileGenerator.Core
             var strings = new List<string>(capacity: NUMBER_OF_UNIQUE_STRINGS);
             for(int i = 0; i < NUMBER_OF_UNIQUE_STRINGS; ++i)
             {
-                var k = random.Next(1, 5);
+                var k = random.Next(0, 5);
                 var builder = new StringBuilder(capacity: 40 * k);
                 for (int j = 0; j < k; ++j)
                 {
@@ -31,8 +31,8 @@ namespace BigFileSorting.TestFileGenerator.Core
 
             long wrtittenSize = 0;
 
-            using (var fileStream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, WRITE_FILE_BUFFER, FileOptions.Asynchronous))
-            using (var streamWriter = new StreamWriter(fileStream, encoding))
+            using (var fileStream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024 * 4, FileOptions.Asynchronous))
+            using (var streamWriter = new StreamWriter(fileStream, encoding, WRITE_FILE_BUFFER))
             {
                 while (wrtittenSize < size)
                 {

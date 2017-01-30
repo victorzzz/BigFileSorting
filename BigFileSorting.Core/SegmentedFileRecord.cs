@@ -9,16 +9,32 @@ namespace BigFileSorting.Core
 {
     internal struct SegmentedFileRecord
     {
+        private string m_Str;
+
         public ulong Number { get; }
         public byte[] StrAsByteArray { get; private set; }
 
-        public string Str { get; private set; }
+        public string GetStr(Encoding encoding)
+        {
+            if (m_Str == null)
+            {
+                m_Str = encoding.GetString(StrAsByteArray);
+            }
+
+            return m_Str;
+        }
 
         public SegmentedFileRecord(ulong number, byte[] strAsByteArray)
         {
             Number = number;
             StrAsByteArray = strAsByteArray;
-            Str = null;
+            m_Str = null;
+        }
+
+        public void ClearStr()
+        {
+            StrAsByteArray = null;
+            m_Str = null;
         }
 
         public int CompareTo(SegmentedFileRecord other, Encoding encoding)
@@ -33,17 +49,10 @@ namespace BigFileSorting.Core
                 return 1;
             }
 
-            if (Str == null)
-            {
-                Str = encoding.GetString(StrAsByteArray);
-            }
+            var thisStr = GetStr(encoding);
+            var otherStr = other.GetStr(encoding);
 
-            if (other.Str == null)
-            {
-                other.Str = encoding.GetString(other.StrAsByteArray);
-            }
-
-            return String.CompareOrdinal(Str, other.Str);
+            return String.CompareOrdinal(thisStr, otherStr);
         }
     }
 }

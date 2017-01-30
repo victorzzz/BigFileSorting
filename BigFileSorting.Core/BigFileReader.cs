@@ -28,6 +28,8 @@ namespace BigFileSorting.Core
         private readonly StreamReader m_StreamReader;
         private readonly CancellationToken m_CancellationToken;
         private readonly long m_SegmentSize;
+        private readonly ProactiveTaskRunner m_ProactiveTaskRunner;
+        private bool m_EndOfFile;
 
         private bool disposedValue; // To detect redundant calls for 'Dispose'
 
@@ -36,13 +38,16 @@ namespace BigFileSorting.Core
             m_CancellationToken = cancellationToken;
             m_SegmentSize = segmentSize;
 
-            m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            m_StreamReader = new StreamReader(m_FileStream, encoding);
+            m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024 * 4, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            m_StreamReader = new StreamReader(m_FileStream, encoding, false, Constants.FILE_BUFFER_SIZE);
+            m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
+
+            m_ProactiveTaskRunner.StartProactiveTask<string>(ReadLineImplAsync);
         }
 
         public bool EndOfFile()
         {
-            return m_StreamReader.EndOfStream;
+            return m_EndOfFile;
         }
 
         public async Task<List<FileRecord>> ReadSegmentAsync()
@@ -79,12 +84,7 @@ namespace BigFileSorting.Core
 
         private async Task<ReadRecordResult?> ReadRecordAsync()
         {
-            if (m_StreamReader.EndOfStream)
-            {
-                return null;
-            }
-
-            var line = await m_StreamReader.ReadLineAsync().ConfigureAwait(false);
+            var line = await ReadLineAsync().ConfigureAwait(false);
             if (line == null)
             {
                 return null;
@@ -94,6 +94,31 @@ namespace BigFileSorting.Core
             ulong parsedNumber = line.ParseULongToDelimiter('.', out dotPosition);
 
             return new ReadRecordResult(new FileRecord(parsedNumber, line.Substring(dotPosition + 1)), line.Length * 2);
+        }
+
+        private async Task<string> ReadLineAsync()
+        {
+            var result = await m_ProactiveTaskRunner.WaitForProactiveTaskAsync<string>().ConfigureAwait(false);
+            if (result != null)
+            {
+                m_ProactiveTaskRunner.StartProactiveTask<string>(ReadLineImplAsync);
+            }
+            else
+            {
+                m_EndOfFile = true;
+            }
+            return result;
+        }   
+
+        private async Task<string> ReadLineImplAsync()
+        {
+            if (m_StreamReader.EndOfStream)
+            {
+                return null;
+            }
+
+            var line = await m_StreamReader.ReadLineAsync().ConfigureAwait(false);
+            return line;
         }
 
         #region IDisposable Support

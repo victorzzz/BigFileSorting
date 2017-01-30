@@ -70,7 +70,7 @@ namespace BigFileSorting.Core.Utils
 
             ulong result = 0;
             delimiterPosition = 0;
-            for (int i = 0; i < str.Length-1; ++i)
+            for (int i = 0; i < str.Length; ++i)
             {
                 var c = str[i];
                 if (c == delimiter)

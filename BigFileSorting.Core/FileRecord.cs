@@ -13,12 +13,17 @@ namespace BigFileSorting.Core
     internal struct FileRecord : IComparable<FileRecord>
     {
         public ulong Number { get; }
-        public string Str { get; }
+        public string Str { get; private set; }
 
         public FileRecord(ulong number, string str)
         {
             Number = number;
             Str = str;
+        }
+
+        public void ClearStr()
+        {
+            Str = null;
         }
 
         public int CompareTo(FileRecord other)
@@ -34,6 +39,21 @@ namespace BigFileSorting.Core
             }
 
             return String.CompareOrdinal(Str, other.Str);
+        }
+
+        public int CompareTo(SegmentedFileRecord other, Encoding encoding)
+        {
+            if (Number < other.Number)
+            {
+                return -1;
+            }
+
+            if (Number > other.Number)
+            {
+                return 1;
+            }
+
+            return String.CompareOrdinal(Str, other.GetStr(encoding));
         }
     }
 }
