@@ -4,13 +4,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using BigFileSorting.Core;
 
 namespace BigFileSorting.TestFileGenerator.Core
 {
     public static class BigFileGenerator
     {
-        private const int WRITE_FILE_BUFFER = 1024 * 1024 * 256;
-        private const int NUMBER_OF_UNIQUE_STRINGS = 10;
+        private const int NUMBER_OF_UNIQUE_STRINGS = 500;
 
         public static async Task Generate(string filePath, long size, Encoding encoding)
         {
@@ -31,8 +31,8 @@ namespace BigFileSorting.TestFileGenerator.Core
 
             long wrtittenSize = 0;
 
-            using (var fileStream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024 * 4, FileOptions.Asynchronous))
-            using (var streamWriter = new StreamWriter(fileStream, encoding, WRITE_FILE_BUFFER))
+            using (var fileStream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous))
+            using (var streamWriter = new StreamWriter(fileStream, encoding, Constants.FILE_BUFFER_SIZE))
             {
                 while (wrtittenSize < size)
                 {

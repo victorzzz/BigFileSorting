@@ -41,6 +41,8 @@ namespace BigFileSorting.Core
 
             await FlushDataAndDisposeFilesImplAsync().ConfigureAwait(false);
 
+            DeleteFileSafe(m_DataFilePah);
+
             m_DataFilePah = Path.Combine(m_TempDir, Path.GetRandomFileName());
 
             m_DataFile = new FileStream(
@@ -99,6 +101,7 @@ namespace BigFileSorting.Core
         private async Task WriteSegmentedFileRecordImplAsync(SegmentedFileRecord record)
         {
             await m_DataFile.WriteAsync(BitConverter.GetBytes(record.Number), 0, 8, m_CancellationToken).ConfigureAwait(false);
+            await m_DataFile.WriteAsync(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4, m_CancellationToken).ConfigureAwait(false);
             await m_DataFile.WriteAsync(record.StrAsByteArray, 0, record.StrAsByteArray.Length, m_CancellationToken).ConfigureAwait(false);
         }
 
@@ -169,7 +172,7 @@ namespace BigFileSorting.Core
 
             // read string length
             byte[] bufferStringLength = new byte[4];
-            bytesRead = await m_DataFile.ReadAsync(bufferNumber, 0, 4, m_CancellationToken).ConfigureAwait(false);
+            bytesRead = await m_DataFile.ReadAsync(bufferStringLength, 0, 4, m_CancellationToken).ConfigureAwait(false);
             if (bytesRead != 4)
             {
                 throw new InvalidOperationException("Unexpected internal error! Can't read string length for the next record of temporary segmented file.");

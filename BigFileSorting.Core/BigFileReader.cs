@@ -38,7 +38,7 @@ namespace BigFileSorting.Core
             m_CancellationToken = cancellationToken;
             m_SegmentSize = segmentSize;
 
-            m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024 * 4, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous | FileOptions.SequentialScan);
             m_StreamReader = new StreamReader(m_FileStream, encoding, false, Constants.FILE_BUFFER_SIZE);
             m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
 
