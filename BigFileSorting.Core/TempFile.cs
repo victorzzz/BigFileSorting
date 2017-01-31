@@ -17,15 +17,17 @@ namespace BigFileSorting.Core
         private FileStream m_DataFile;
         private string m_DataFilePah;
         private readonly Encoding m_Encoding;
+        private readonly TotalAllocatedMemoryLimiter m_Limiter;
         private CancellationToken m_CancellationToken;
         private bool m_ReadMode;
 
         private ProactiveTaskRunner m_ProactiveTaskRunner;
 
-        public TempFile(string tempDir, Encoding encoding, CancellationToken cancellationToken)
+        public TempFile(string tempDir, Encoding encoding, TotalAllocatedMemoryLimiter limiter, CancellationToken cancellationToken)
         {
             m_TempDir = tempDir;
             m_Encoding = encoding;
+            m_Limiter = limiter;
             m_CancellationToken = cancellationToken;
             m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
         }
@@ -59,7 +61,7 @@ namespace BigFileSorting.Core
         public async Task WriteSortedSegmentAsync(IReadOnlyList<FileRecord> segment)
         {
             await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            m_ProactiveTaskRunner.StartProactiveTask(async () => await WriteSortedSegmentImplAsync(segment).ConfigureAwait(false));
+            await WriteSortedSegmentImplAsync(segment).ConfigureAwait(false);
         }
 
         private async Task WriteSortedSegmentImplAsync(IReadOnlyList<FileRecord> segment)
@@ -74,6 +76,8 @@ namespace BigFileSorting.Core
                 m_CancellationToken.ThrowIfCancellationRequested();
                 await WriteOriginalFileRecordImplAsync(record).ConfigureAwait(false);
             }
+
+            m_Limiter.TurnOff();
         }
 
         public async Task WriteOriginalFileRecordAsync(FileRecord record)
@@ -90,6 +94,10 @@ namespace BigFileSorting.Core
 
             await m_DataFile.WriteAsync(BitConverter.GetBytes(strBytes.Length), 0, 4, m_CancellationToken).ConfigureAwait(false);
             await m_DataFile.WriteAsync(strBytes, 0, strBytes.Length, m_CancellationToken).ConfigureAwait(false);
+
+            record.ClearStr();
+
+            m_Limiter.NotifyMemoryChanged();
         }
 
         public async Task WriteSegmentedFileRecordAsync(SegmentedFileRecord record)
@@ -103,6 +111,10 @@ namespace BigFileSorting.Core
             await m_DataFile.WriteAsync(BitConverter.GetBytes(record.Number), 0, 8, m_CancellationToken).ConfigureAwait(false);
             await m_DataFile.WriteAsync(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4, m_CancellationToken).ConfigureAwait(false);
             await m_DataFile.WriteAsync(record.StrAsByteArray, 0, record.StrAsByteArray.Length, m_CancellationToken).ConfigureAwait(false);
+
+            record.ClearStr();
+
+            m_Limiter.NotifyMemoryChanged();
         }
 
         public async Task SwitchToReadModeAsync()
@@ -199,6 +211,8 @@ namespace BigFileSorting.Core
         {
             await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
             await FlushDataAndDisposeFilesImplAsync().ConfigureAwait(false);
+
+            m_Limiter.TurnOff();
         }
 
         private  async Task FlushDataAndDisposeFilesImplAsync()

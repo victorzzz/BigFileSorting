@@ -14,10 +14,10 @@ namespace BigFileSorting.Test
     [TestClass]
     public class BigFileSorterTest
     {
-        private const string BIG_SOURCE_FILE_PATH = @"e:\BigFileSorterTestData\TestFile.txt";
-        private const string BIG_DESTINATION_FILE_PATH = @"e:\BigFileSorterTestData\TestFile.target.txt";
-        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024L * 10L;
-        private const long TEST_MEMORY_USE = -1;
+        private const string BIG_SOURCE_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.txt";
+        private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
+        private const long TEST_FILE_SIZE = 1024L * 1024 * 10L;
+        private const long TEST_MEMORY_USE = 1024L * 1024 * 3;
 
         [TestInitialize]
         public void TestInitialize()
@@ -28,7 +28,6 @@ namespace BigFileSorting.Test
                 BigFileGenerator.Generate(BIG_SOURCE_FILE_PATH, TEST_FILE_SIZE, Encoding.Unicode).Wait();
                 Trace.WriteLine("Generating done!");
 
-               
                 GC.Collect(2, GCCollectionMode.Forced, true, true);
             }
         }
@@ -40,13 +39,13 @@ namespace BigFileSorting.Test
 
             var sw = Stopwatch.StartNew();
 
-            await BigFileSorterNew.Sort(
+            var sorter = new BigFileSorterNew(CancellationToken.None, Encoding.Unicode);
+
+            await sorter.Sort(
                 BIG_SOURCE_FILE_PATH,
                 BIG_DESTINATION_FILE_PATH,
                 new List<string>() { @"c:\testtemp" },
-                Encoding.Unicode,
-                TEST_MEMORY_USE,
-                CancellationToken.None).ConfigureAwait(false);
+                TEST_MEMORY_USE).ConfigureAwait(false);
 
             sw.Stop();
 

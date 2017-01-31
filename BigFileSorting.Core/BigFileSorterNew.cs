@@ -13,25 +13,32 @@ using BigFileSorting.Core.Utils;
 
 namespace BigFileSorting.Core
 {
-    public static class BigFileSorterNew
+    public class BigFileSorterNew
     {
+        private readonly ProactiveTaskRunner m_ProactiveTaskRunner;
+        private readonly CancellationToken m_CancellationToken;
+        private readonly Encoding m_Encoding;
+
+        public BigFileSorterNew(CancellationToken cancellationToken, Encoding encoding)
+        {
+            m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
+            m_CancellationToken = cancellationToken;
+            m_Encoding = encoding;
+        }
+
         /// <summary>
-        /// NOT thread safe!
+        /// 
         /// </summary>
         /// <param name="sourceFilePath"></param>
         /// <param name="targetFilePath"></param>
         /// <param name="tempDirs"></param>
-        /// <param name="encoding"></param>
         /// <param name="memoryToUse"></param>
-        /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        public static async Task Sort(
+        public async Task Sort(
             string sourceFilePath,
             string targetFilePath,
             IReadOnlyList<string> tempDirs,
-            Encoding encoding,
-            long memoryToUse,
-            CancellationToken cancellationToken)
+            long memoryToUse)
         {
             Trace.WriteLine("START!");
 
@@ -51,7 +58,7 @@ namespace BigFileSorting.Core
             }
 
             // check temp dirs
-            tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs, cancellationToken);
+            tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs, m_CancellationToken);
 
             if (memoryToUse <= 0)
             {
@@ -60,19 +67,21 @@ namespace BigFileSorting.Core
 
             Trace.WriteLine($"memoryToUse:{memoryToUse}");
 
-            using (var tempFile0 = new TempFile(tempDirs[0], encoding, cancellationToken))
-            using (var tempFile1 = new TempFile(tempDirs[1], encoding, cancellationToken))
+            var limiter = new TotalAllocatedMemoryLimiter(false, m_CancellationToken);
+
+            using (var tempFile0 = new TempFile(tempDirs[0], m_Encoding, limiter, m_CancellationToken))
+            using (var tempFile1 = new TempFile(tempDirs[1], m_Encoding, limiter, m_CancellationToken))
             {
                 var sourceTempFile = tempFile0;
                 var targetTempFile = tempFile1;
 
-                using (var fileReader = new BigFileReader(sourceFilePath, memoryToUse, encoding, cancellationToken))
+                using (var fileReader = new BigFileReader(sourceFilePath, memoryToUse, m_Encoding, limiter, m_CancellationToken))
                 {
                     bool firstSegment = true;
 
                     while (true)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        m_CancellationToken.ThrowIfCancellationRequested();
 
                         var segment = await fileReader.ReadSegmentAsync().ConfigureAwait(false);
                         if (segment.Count == 0)
@@ -90,40 +99,25 @@ namespace BigFileSorting.Core
 
                         Trace.WriteLine($"Sorted! {sw_sorting.Elapsed}");
 
+                        await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
+
                         if (fileReader.EndOfFile())
                         {
-                            using (var fileWriter = new BigFileWriter(targetFilePath, encoding, cancellationToken))
+                            using (var fileWriter = new BigFileWriter(targetFilePath, m_Encoding, m_CancellationToken))
                             {
                                 if (firstSegment)
                                 {
                                     // the whole file is already sorted
                                     // we don't need to use any temporary files
                                     // just write it to the destination file
-
-                                    Trace.WriteLine("Write result directly from sorted segment");
-
-                                    var sw_writing1 = Stopwatch.StartNew();
                                     await fileWriter.WriteOriginalSegmentAsync(segment).ConfigureAwait(false);
-
-                                    sw_writing1.Stop();
-                                    Trace.WriteLine($"DONE: {sw_writing1.Elapsed}. Write result directly from sorted segment");
                                 }
                                 else
                                 {
-                                    Trace.WriteLine("Write result merging with temp file");
-                                    var sw_writing2 = Stopwatch.StartNew();
-                                    await MergeAndWriteAsync(sourceTempFile, fileWriter, segment, encoding, cancellationToken).ConfigureAwait(false);
-
-                                    sw_writing2.Stop();
-                                    Trace.WriteLine($"DONE: {sw_writing2.Elapsed}. Write result merging with temp file");
+                                    await MergeAndWriteAsync(sourceTempFile, fileWriter, segment, limiter).ConfigureAwait(false);
                                 }
 
-                                Trace.WriteLine("Flush result");
-                                var sw_flushing = Stopwatch.StartNew();
                                 await fileWriter.FlushDataAndDisposeFilesAsync().ConfigureAwait(false);
-
-                                sw_flushing.Stop();
-                                Trace.WriteLine($"DONE: {sw_flushing.Elapsed}. Flush result");
 
                                 break;
                             }
@@ -131,15 +125,18 @@ namespace BigFileSorting.Core
                         else
                         {
                             await targetTempFile.SwitchToNewFileAsync().ConfigureAwait(false);
+
+                            await limiter.ResetLimit();
+
                             if (firstSegment)
                             {
-                                Trace.WriteLine("Write temp file directly from sorted segment");
-                                await targetTempFile.WriteSortedSegmentAsync(segment);
+                                m_ProactiveTaskRunner.StartProactiveTask(
+                                    async () => await targetTempFile.WriteSortedSegmentAsync(segment).ConfigureAwait(false));
                             }
                             else
                             {
-                                Trace.WriteLine("Write temp file merging with another temp file");
-                                await MergeAndWriteAsync(sourceTempFile, targetTempFile, segment, encoding, cancellationToken).ConfigureAwait(false);
+                                m_ProactiveTaskRunner.StartProactiveTask(
+                                    async () => await MergeAndWriteAsync(sourceTempFile, targetTempFile, segment, limiter).ConfigureAwait(false));
                             }
                         }
 
@@ -154,11 +151,10 @@ namespace BigFileSorting.Core
             }
         }
 
-        private static async Task MergeAndWriteAsync(TempFile sourceTempFile,
+        private async Task MergeAndWriteAsync(TempFile sourceTempFile,
             IFileWritter destinationFile,
             IReadOnlyList<FileRecord> lastSegment,
-            Encoding encoding,
-            CancellationToken cancellationToken)
+            TotalAllocatedMemoryLimiter limiter)
         {
             await sourceTempFile.SwitchToReadModeAsync().ConfigureAwait(false);
 
@@ -168,7 +164,7 @@ namespace BigFileSorting.Core
             {
                 while (true)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    m_CancellationToken.ThrowIfCancellationRequested();
 
                     if (!tempFileRecord.HasValue)
                     {
@@ -177,7 +173,7 @@ namespace BigFileSorting.Core
                     }
                     else
                     {
-                        if (lastSegmentRecord.CompareTo(tempFileRecord.Value, encoding) < 0)
+                        if (lastSegmentRecord.CompareTo(tempFileRecord.Value, m_Encoding) < 0)
                         {
                             await destinationFile.WriteOriginalFileRecordAsync(lastSegmentRecord).ConfigureAwait(false);
                             break;
@@ -193,11 +189,13 @@ namespace BigFileSorting.Core
 
             while(tempFileRecord.HasValue)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                m_CancellationToken.ThrowIfCancellationRequested();
 
                 await destinationFile.WriteSegmentedFileRecordAsync(tempFileRecord.Value).ConfigureAwait(false);
                 tempFileRecord = await sourceTempFile.ReadRecordToMergeAsync().ConfigureAwait(false);
             }
+
+            limiter.TurnOff();
         }
     }
 }

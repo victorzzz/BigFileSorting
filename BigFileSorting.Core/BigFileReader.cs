@@ -29,11 +29,13 @@ namespace BigFileSorting.Core
         private readonly CancellationToken m_CancellationToken;
         private readonly long m_SegmentSize;
         private readonly ProactiveTaskRunner m_ProactiveTaskRunner;
+        private readonly TotalAllocatedMemoryLimiter m_Limiter;
+
         private bool m_EndOfFile;
 
         private bool disposedValue; // To detect redundant calls for 'Dispose'
 
-        public BigFileReader(string filePath, long segmentSize, Encoding encoding, CancellationToken cancellationToken)
+        public BigFileReader(string filePath, long segmentSize, Encoding encoding, TotalAllocatedMemoryLimiter limiter, CancellationToken cancellationToken)
         {
             m_CancellationToken = cancellationToken;
             m_SegmentSize = segmentSize;
@@ -41,6 +43,7 @@ namespace BigFileSorting.Core
             m_FileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous | FileOptions.SequentialScan);
             m_StreamReader = new StreamReader(m_FileStream, encoding, false, Constants.FILE_BUFFER_SIZE);
             m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
+            m_Limiter = limiter;
 
             m_ProactiveTaskRunner.StartProactiveTask<string>(ReadLineImplAsync);
         }
@@ -116,6 +119,8 @@ namespace BigFileSorting.Core
             {
                 return null;
             }
+
+            await m_Limiter.WaitForPosibilityToAllocMemory().ConfigureAwait(false);
 
             var line = await m_StreamReader.ReadLineAsync().ConfigureAwait(false);
             return line;

@@ -45,6 +45,7 @@ namespace BigFileSorting.Core
                 m_CancellationToken.ThrowIfCancellationRequested();
 
                 await WriteOriginalFileRecordImplAsync(record).ConfigureAwait(false);
+
                 record.ClearStr();
             }
         }
