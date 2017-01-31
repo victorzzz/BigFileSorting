@@ -130,13 +130,16 @@ namespace BigFileSorting.Core
 
                             if (firstSegment)
                             {
+                                var targetTempFileLocal = targetTempFile;
                                 m_ProactiveTaskRunner.StartProactiveTask(
-                                    async () => await targetTempFile.WriteSortedSegmentAsync(segment).ConfigureAwait(false));
+                                    async () => await targetTempFileLocal.WriteSortedSegmentAsync(segment).ConfigureAwait(false));
                             }
                             else
                             {
+                                var sourceTempFileLocal = sourceTempFile;
+                                var targetTempFileLocal = targetTempFile;
                                 m_ProactiveTaskRunner.StartProactiveTask(
-                                    async () => await MergeAndWriteAsync(sourceTempFile, targetTempFile, segment, limiter).ConfigureAwait(false));
+                                    async () => await MergeAndWriteAsync(sourceTempFileLocal, targetTempFileLocal, segment, limiter).ConfigureAwait(false));
                             }
                         }
 

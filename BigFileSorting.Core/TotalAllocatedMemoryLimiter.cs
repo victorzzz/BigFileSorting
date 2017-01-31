@@ -60,14 +60,14 @@ namespace BigFileSorting.Core
                     return;
                 }
 
-                await m_Event.WaitAsync(m_CancellationToken);
+                await m_Event.WaitAsync(m_CancellationToken).ConfigureAwait(false);
 
                 if (!m_On)
                 {
                     return;
                 }
 
-                var currentTotalMemory = GC.GetTotalMemory(forceFullCollection: false);
+                var currentTotalMemory = GC.GetTotalMemory(forceFullCollection: true);
 
                 using (var lockObj = await m_LimitLock.ReaderLockAsync(m_CancellationToken).ConfigureAwait(false))
                 {
