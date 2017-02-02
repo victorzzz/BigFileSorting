@@ -29,7 +29,7 @@ namespace BigFileSorting.Core.Utils
                 return 1;
             }
 
-            int minTail = Math.Min(leftTail, rightTail);
+            var minTail = Math.Min(leftTail, rightTail);
 
             for(int i=0; i < minTail - 1; ++i)       
             {

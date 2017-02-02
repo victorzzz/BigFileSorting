@@ -12,7 +12,7 @@ namespace BigFileSorting.TestFileGenerator.Core
     {
         private const int NUMBER_OF_UNIQUE_STRINGS = 500;
 
-        public static async Task Generate(string filePath, long size, Encoding encoding)
+        public static void Generate(string filePath, long size, Encoding encoding)
         {
             var random = new Random(DateTime.Now.Millisecond);
 
@@ -31,7 +31,7 @@ namespace BigFileSorting.TestFileGenerator.Core
 
             long wrtittenSize = 0;
 
-            using (var fileStream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous))
+            using (var fileStream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, Constants.FILE_BUFFER_SIZE, FileOptions.None))
             using (var streamWriter = new StreamWriter(fileStream, encoding, Constants.FILE_BUFFER_SIZE))
             {
                 while (wrtittenSize < size)
@@ -43,7 +43,7 @@ namespace BigFileSorting.TestFileGenerator.Core
                     string lineToFile = $"{number}.{str}";
                     wrtittenSize += lineToFile.Length * 2;
 
-                    await streamWriter.WriteLineAsync(lineToFile).ConfigureAwait(false);
+                    streamWriter.WriteLine(lineToFile);
                 }
             }
         }

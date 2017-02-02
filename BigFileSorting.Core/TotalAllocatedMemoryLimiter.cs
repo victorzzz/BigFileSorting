@@ -4,31 +4,34 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
-using Nito.AsyncEx;
 
 namespace BigFileSorting.Core
 {
     internal class TotalAllocatedMemoryLimiter
     {
-        private long m_Limit;
+        private long m_Balans;
         private volatile bool m_On;
-        private readonly AsyncAutoResetEvent m_Event = new AsyncAutoResetEvent(set: false);
-        private readonly AsyncReaderWriterLock m_LimitLock = new AsyncReaderWriterLock();
+        private readonly AutoResetEvent m_Event = new AutoResetEvent(initialState: false);
+        private readonly ReaderWriterLockSlim m_BalansLock = new ReaderWriterLockSlim();
 
         private readonly CancellationToken m_CancellationToken;
 
         public TotalAllocatedMemoryLimiter(bool on, CancellationToken cancellationToken)
         {
             m_CancellationToken = cancellationToken;
-            m_Limit = GC.GetTotalMemory(true);
             m_On = on;
         }
 
-        public async Task ResetLimit()
+        public void ResetBalans()
         {
-            using (var lockObj = await m_LimitLock.WriterLockAsync(m_CancellationToken).ConfigureAwait(false))
+            m_BalansLock.EnterWriteLock();
+            try
             {
-                m_Limit = GC.GetTotalMemory(true);
+                m_Balans = 0;
+            }
+            finally
+            {
+                m_BalansLock.ExitWriteLock();
             }
 
             TurnOn();
@@ -46,38 +49,68 @@ namespace BigFileSorting.Core
             m_Event.Set();
         }
 
-        public void NotifyMemoryChanged()
+        public void MemoryDisposed(long size)
         {
+            m_BalansLock.EnterWriteLock();
+            try
+            {
+                m_Balans -= size;
+            }
+            finally
+            {
+                m_BalansLock.ExitWriteLock();
+            }
+
             m_Event.Set();
         }
 
-        public async Task WaitForPosibilityToAllocMemory()
+        public void MemoryAllocated(long size)
+        {
+            m_BalansLock.EnterWriteLock();
+            try
+            {
+                m_Balans += size;
+            }
+            finally
+            {
+                m_BalansLock.ExitWriteLock();
+            }
+        }
+
+        public void WaitForPosibilityToAllocMemory()
         {
             while (true)
             {
-                if (!m_On)
-                {
-                    return;
-                }
-
-                await m_Event.WaitAsync(m_CancellationToken).ConfigureAwait(false);
+                m_CancellationToken.ThrowIfCancellationRequested();
 
                 if (!m_On)
                 {
                     return;
                 }
 
-                var currentTotalMemory = GC.GetTotalMemory(forceFullCollection: true);
+                m_Event.WaitOne();
 
-                using (var lockObj = await m_LimitLock.ReaderLockAsync(m_CancellationToken).ConfigureAwait(false))
+                m_CancellationToken.ThrowIfCancellationRequested();
+
+                if (!m_On)
                 {
-                    if (currentTotalMemory < m_Limit)
+                    return;
+                }
+
+                m_BalansLock.EnterReadLock();
+                try
+                {
+                    if (m_Balans < 0)
                     {
                         return;
                     }
                 }
+                finally
+                {
+                    m_BalansLock.ExitReadLock();
+                }
 
-                await Task.Delay(TimeSpan.FromSeconds(Constants.MEMPRY_LIMITER_DELAY_SECONDS)).ConfigureAwait(false);
+                Task.Delay(TimeSpan.FromSeconds(Constants.MEMORY_LIMITER_DELAY_SECONDS));
             }
         }
     }

@@ -27,65 +27,62 @@ namespace BigFileSorting.Core
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
-                Constants.FILE_BUFFER_SIZE, FileOptions.Asynchronous);
+                Constants.FILE_BUFFER_SIZE, FileOptions.None);
 
             m_StreamWriter = new StreamWriter(fileStream, encoding, Constants.FILE_BUFFER_SIZE);
             m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
         }
-        public async Task WriteOriginalSegmentAsync(IReadOnlyList<FileRecord> segmen)
+        public void WriteOriginalSegment(IReadOnlyList<FileRecord> segmen)
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            m_ProactiveTaskRunner.StartProactiveTask(async () => await WriteOriginalSegmentImpleAsync(segmen).ConfigureAwait(false));
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteOriginalSegmentImple(segmen));
         }
 
-        private async Task WriteOriginalSegmentImpleAsync(IReadOnlyList<FileRecord> segment)
+        private void WriteOriginalSegmentImple(IReadOnlyList<FileRecord> segment)
         {
             foreach(var record in segment)
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
-
-                await WriteOriginalFileRecordImplAsync(record).ConfigureAwait(false);
-
-                record.ClearStr();
+                WriteOriginalFileRecordImpl(record);
             }
         }
 
-        public async Task WriteSegmentedFileRecordAsync(SegmentedFileRecord record)
+        public void WriteSegmentedFileRecord(SegmentedFileRecord record)
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            m_ProactiveTaskRunner.StartProactiveTask(async () => await WriteSegmentedFileRecordImplAsync(record).ConfigureAwait(false));
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteSegmentedFileRecordImpl(record));
         }
 
-        private async Task WriteSegmentedFileRecordImplAsync(SegmentedFileRecord record)
+        private void WriteSegmentedFileRecordImpl(SegmentedFileRecord record)
         {
-            string str = record.GetStr(m_Encoding);
-            await m_StreamWriter.WriteLineAsync($"{record.Number}.{str}").ConfigureAwait(false);
-
+            var str = record.GetStr(m_Encoding);
+            m_StreamWriter.WriteLine($"{record.Number}.{str}");
             record.ClearStr();
         }
 
-        public async Task WriteOriginalFileRecordAsync(FileRecord record)
+        public void WriteOriginalFileRecord(FileRecord record)
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            m_ProactiveTaskRunner.StartProactiveTask(async () => await WriteOriginalFileRecordImplAsync(record).ConfigureAwait(false));
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteOriginalFileRecordImpl(record));
         }
 
-        private async Task WriteOriginalFileRecordImplAsync(FileRecord record)
+        private void WriteOriginalFileRecordImpl(FileRecord record)
         {
-            await m_StreamWriter.WriteLineAsync($"{record.Number}.{record.Str}").ConfigureAwait(false);
+            m_StreamWriter.WriteLine($"{record.Number}.{record.Str}");
+            record.ClearStr();
         }
 
-        public async Task FlushDataAndDisposeFilesAsync()
+        public void FlushDataAndDisposeFiles()
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            await FlushDataAndDisposeFilesImplAsync().ConfigureAwait(false);
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            FlushDataAndDisposeFilesImpl();
         }
 
-        private async Task FlushDataAndDisposeFilesImplAsync()
+        private void FlushDataAndDisposeFilesImpl()
         {
             if (m_StreamWriter != null)
             {
-                await m_StreamWriter.FlushAsync().ConfigureAwait(false);
+                m_StreamWriter.Flush();
                 m_StreamWriter.Dispose();
                 m_StreamWriter = null;
             }
@@ -99,7 +96,7 @@ namespace BigFileSorting.Core
             {
                 if (disposing)
                 {
-                    FlushDataAndDisposeFilesImplAsync().Wait();
+                    FlushDataAndDisposeFilesImpl();
                 }
 
                 disposedValue = true;

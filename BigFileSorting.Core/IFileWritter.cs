@@ -8,8 +8,8 @@ namespace BigFileSorting.Core
 {
     internal interface IFileWritter
     {
-        Task WriteSegmentedFileRecordAsync(SegmentedFileRecord record);
+        void WriteSegmentedFileRecord(SegmentedFileRecord record);
 
-        Task WriteOriginalFileRecordAsync(FileRecord record);
+        void WriteOriginalFileRecord(FileRecord record);
     }
 }

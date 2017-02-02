@@ -14,10 +14,10 @@ namespace BigFileSorting.Test
     [TestClass]
     public class BigFileSorterTest
     {
-        private const string BIG_SOURCE_FILE_PATH = @"e:\BigFileSorterTestData\TestFile.txt";
-        private const string BIG_DESTINATION_FILE_PATH = @"e:\BigFileSorterTestData\TestFile.target.txt";
-        private const long TEST_FILE_SIZE = 1024L * 1024L * 100L;
-        private const long TEST_MEMORY_USE = 1024L * 1024L * 30L;
+        private const string BIG_SOURCE_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.txt";
+        private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
+        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024L * 10L;
+        private const long TEST_MEMORY_USE = -1;
 
         [TestInitialize]
         public void TestInitialize()
@@ -25,7 +25,7 @@ namespace BigFileSorting.Test
             if(!File.Exists(BIG_SOURCE_FILE_PATH))
             {
                 Trace.WriteLine("Generating new file!");
-                BigFileGenerator.Generate(BIG_SOURCE_FILE_PATH, TEST_FILE_SIZE, Encoding.Unicode).Wait();
+                BigFileGenerator.Generate(BIG_SOURCE_FILE_PATH, TEST_FILE_SIZE, Encoding.Unicode);
                 Trace.WriteLine("Generating done!");
 
                 GC.Collect(2, GCCollectionMode.Forced, true, true);
@@ -33,7 +33,7 @@ namespace BigFileSorting.Test
         }
 
         [TestMethod]
-        public async Task Sort()
+        public void Sort()
         {
             Trace.WriteLine("Hi!");
 
@@ -41,11 +41,11 @@ namespace BigFileSorting.Test
 
             var sorter = new BigFileSorterNew(CancellationToken.None, Encoding.Unicode);
 
-            await sorter.Sort(
+            sorter.Sort(
                 BIG_SOURCE_FILE_PATH,
                 BIG_DESTINATION_FILE_PATH,
                 new List<string>() { @"c:\testtemp" },
-                TEST_MEMORY_USE).ConfigureAwait(false);
+                TEST_MEMORY_USE);
 
             sw.Stop();
 

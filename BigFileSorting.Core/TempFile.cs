@@ -17,31 +17,29 @@ namespace BigFileSorting.Core
         private FileStream m_DataFile;
         private string m_DataFilePah;
         private readonly Encoding m_Encoding;
-        private readonly TotalAllocatedMemoryLimiter m_Limiter;
         private CancellationToken m_CancellationToken;
         private bool m_ReadMode;
 
         private ProactiveTaskRunner m_ProactiveTaskRunner;
 
-        public TempFile(string tempDir, Encoding encoding, TotalAllocatedMemoryLimiter limiter, CancellationToken cancellationToken)
+        public TempFile(string tempDir, Encoding encoding, CancellationToken cancellationToken)
         {
             m_TempDir = tempDir;
             m_Encoding = encoding;
-            m_Limiter = limiter;
             m_CancellationToken = cancellationToken;
             m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
         }
 
-        public async Task SwitchToNewFileAsync()
+        public void SwitchToNewFile()
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
+            m_ProactiveTaskRunner.WaitForProactiveTask();
 
             if (m_DataFilePah != null && !m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToNewFileAsync' was called in write mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToNewFile' was called in write mode.");
             }
 
-            await FlushDataAndDisposeFilesImplAsync().ConfigureAwait(false);
+            FlushDataAndDisposeFilesImpl();
 
             DeleteFileSafe(m_DataFilePah);
 
@@ -53,86 +51,80 @@ namespace BigFileSorting.Core
                 FileAccess.Write,
                 FileShare.None,
                 Constants.FILE_BUFFER_SIZE,
-                FileOptions.Asynchronous);
+                FileOptions.None);
 
             m_ReadMode = false;
         }
 
-        public async Task WriteSortedSegmentAsync(IReadOnlyList<FileRecord> segment)
+        public void WriteSortedSegment(IReadOnlyList<FileRecord> segment)
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            await WriteSortedSegmentImplAsync(segment).ConfigureAwait(false);
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            WriteSortedSegmentImpl(segment);
         }
 
-        private async Task WriteSortedSegmentImplAsync(IReadOnlyList<FileRecord> segment)
+        private void WriteSortedSegmentImpl(IReadOnlyList<FileRecord> segment)
         {
             if (m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.WriteSortedSegmentAsync' was called in read mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.WriteSortedSegment' was called in read mode.");
             }
 
             foreach(var record in segment)
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
-                await WriteOriginalFileRecordImplAsync(record).ConfigureAwait(false);
+                WriteOriginalFileRecordImpl(record);
             }
-
-            m_Limiter.TurnOff();
         }
 
-        public async Task WriteOriginalFileRecordAsync(FileRecord record)
+        public void WriteOriginalFileRecord(FileRecord record)
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            m_ProactiveTaskRunner.StartProactiveTask(async () => await WriteOriginalFileRecordImplAsync(record).ConfigureAwait(false));
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteOriginalFileRecordImpl(record));
         }
 
-        private async Task WriteOriginalFileRecordImplAsync(FileRecord record)
+        private void WriteOriginalFileRecordImpl(FileRecord record)
         {
-            await m_DataFile.WriteAsync(BitConverter.GetBytes(record.Number), 0, 8, m_CancellationToken).ConfigureAwait(false);
+            m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
 
             var strBytes = m_Encoding.GetBytes(record.Str);
 
-            await m_DataFile.WriteAsync(BitConverter.GetBytes(strBytes.Length), 0, 4, m_CancellationToken).ConfigureAwait(false);
-            await m_DataFile.WriteAsync(strBytes, 0, strBytes.Length, m_CancellationToken).ConfigureAwait(false);
+            m_DataFile.Write(BitConverter.GetBytes(strBytes.Length), 0, 4);
+            m_DataFile.Write(strBytes, 0, strBytes.Length);
 
             record.ClearStr();
-
-            m_Limiter.NotifyMemoryChanged();
         }
 
-        public async Task WriteSegmentedFileRecordAsync(SegmentedFileRecord record)
+        public void WriteSegmentedFileRecord(SegmentedFileRecord record)
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            m_ProactiveTaskRunner.StartProactiveTask(async () => await WriteSegmentedFileRecordImplAsync(record).ConfigureAwait(false));
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteSegmentedFileRecordImpl(record));
         }
 
-        private async Task WriteSegmentedFileRecordImplAsync(SegmentedFileRecord record)
+        private void WriteSegmentedFileRecordImpl(SegmentedFileRecord record)
         {
-            await m_DataFile.WriteAsync(BitConverter.GetBytes(record.Number), 0, 8, m_CancellationToken).ConfigureAwait(false);
-            await m_DataFile.WriteAsync(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4, m_CancellationToken).ConfigureAwait(false);
-            await m_DataFile.WriteAsync(record.StrAsByteArray, 0, record.StrAsByteArray.Length, m_CancellationToken).ConfigureAwait(false);
+            m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
+            m_DataFile.Write(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4);
+            m_DataFile.Write(record.StrAsByteArray, 0, record.StrAsByteArray.Length);
 
             record.ClearStr();
-
-            m_Limiter.NotifyMemoryChanged();
         }
 
-        public async Task SwitchToReadModeAsync()
+        public void SwitchToReadMode()
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            await SwitchToReadModeImplAsync().ConfigureAwait(false);
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            SwitchToReadModeImpl();
 
-            m_ProactiveTaskRunner.StartProactiveTask<SegmentedFileRecord?>(async () => await ReadRecordToMergeImplAsync().ConfigureAwait(false));
+            m_ProactiveTaskRunner.StartProactiveTask<SegmentedFileRecord?>(() => ReadRecordToMergeImpl());
         }
 
-        private async Task SwitchToReadModeImplAsync()
+        private void SwitchToReadModeImpl()
         {
             if (m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToReadModeAsync' was called in read mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToReadMode' was called in read mode.");
             }
 
-            await FlushDataAndDisposeFilesImplAsync().ConfigureAwait(false);
+            FlushDataAndDisposeFilesImpl();
 
             m_DataFile = new FileStream(
                 m_DataFilePah,
@@ -140,18 +132,18 @@ namespace BigFileSorting.Core
                 FileAccess.Read,
                 FileShare.Read,
                 Constants.FILE_BUFFER_SIZE,
-                FileOptions.Asynchronous | FileOptions.SequentialScan | FileOptions.DeleteOnClose);
+                FileOptions.SequentialScan | FileOptions.DeleteOnClose);
 
             m_ReadMode = true;
         }
 
-        public async Task<SegmentedFileRecord?> ReadRecordToMergeAsync()
+        public SegmentedFileRecord? ReadRecordToMerge()
         {
-            var result = await m_ProactiveTaskRunner.WaitForProactiveTaskAsync<SegmentedFileRecord?>().ConfigureAwait(false);
+            var result = m_ProactiveTaskRunner.WaitForProactiveTask<SegmentedFileRecord?>();
 
             if (result.HasValue)
             {
-                m_ProactiveTaskRunner.StartProactiveTask<SegmentedFileRecord?>(async () => await ReadRecordToMergeImplAsync().ConfigureAwait(false));
+                m_ProactiveTaskRunner.StartProactiveTask<SegmentedFileRecord?>(() => ReadRecordToMergeImpl());
             }
 
             return result;
@@ -161,16 +153,16 @@ namespace BigFileSorting.Core
         /// 
         /// </summary>
         /// <returns>Returns null if end of segment is reached</returns>
-        private async Task<SegmentedFileRecord?> ReadRecordToMergeImplAsync()
+        private SegmentedFileRecord? ReadRecordToMergeImpl()
         {
             if (!m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.ReadRecordToMergeAsync' was called in not read mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.ReadRecordToMerge' was called in not read mode.");
             }
 
             // read Number
             byte[] bufferNumber = new byte[8];
-            var bytesRead = await m_DataFile.ReadAsync(bufferNumber, 0, 8, m_CancellationToken).ConfigureAwait(false);
+            var bytesRead = m_DataFile.Read(bufferNumber, 0, 8);
 
             if (bytesRead == 0)
             {
@@ -184,7 +176,7 @@ namespace BigFileSorting.Core
 
             // read string length
             byte[] bufferStringLength = new byte[4];
-            bytesRead = await m_DataFile.ReadAsync(bufferStringLength, 0, 4, m_CancellationToken).ConfigureAwait(false);
+            bytesRead = m_DataFile.Read(bufferStringLength, 0, 4);
             if (bytesRead != 4)
             {
                 throw new InvalidOperationException("Unexpected internal error! Can't read string length for the next record of temporary segmented file.");
@@ -198,7 +190,7 @@ namespace BigFileSorting.Core
 
             // read string
             byte[] bufferString = new byte[stringLength];
-            bytesRead = await m_DataFile.ReadAsync(bufferString, 0, stringLength, m_CancellationToken).ConfigureAwait(false);
+            bytesRead = m_DataFile.Read(bufferString, 0, stringLength);
             if (bytesRead != stringLength)
             {
                 throw new InvalidOperationException("Unexpected internal error! Can't read String for the next record of temporary segmented file.");
@@ -207,19 +199,17 @@ namespace BigFileSorting.Core
             return new SegmentedFileRecord(BitConverter.ToUInt64(bufferNumber, 0), bufferString);
         }
 
-        public async Task FlushDataAndDisposeFilesAsync()
+        public void FlushDataAndDisposeFiles()
         {
-            await m_ProactiveTaskRunner.WaitForProactiveTaskAsync().ConfigureAwait(false);
-            await FlushDataAndDisposeFilesImplAsync().ConfigureAwait(false);
-
-            m_Limiter.TurnOff();
+            m_ProactiveTaskRunner.WaitForProactiveTask();
+            FlushDataAndDisposeFilesImpl();
         }
 
-        private  async Task FlushDataAndDisposeFilesImplAsync()
+        private  void FlushDataAndDisposeFilesImpl()
         {
             if (m_DataFile != null)
             {
-                await m_DataFile.FlushAsync(m_CancellationToken).ConfigureAwait(false);
+                m_DataFile.Flush();
                 m_DataFile.Dispose();
                 m_DataFile = null;
             }
@@ -248,7 +238,7 @@ namespace BigFileSorting.Core
             {
                 if (disposing)
                 {
-                    FlushDataAndDisposeFilesAsync().Wait();
+                    FlushDataAndDisposeFiles();
 
                     if (!m_ReadMode)
                     {

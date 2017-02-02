@@ -17,45 +17,45 @@ namespace BigFileSorting.Core
             m_CancellationToken = cancellationToken;
         }
 
-        public async Task<ResultType> WaitForProactiveTaskAsync<ResultType>()
+        public ResultType WaitForProactiveTask<ResultType>()
         {
             if (m_ProactiveTask == null)
             {
-                throw new InvalidOperationException("Unexpected internal error! WaitForProactiveTaskAsync<ResultType> was called when m_ProactiveTask is null");
+                throw new InvalidOperationException("Unexpected internal error! WaitForProactiveTask<ResultType> was called when m_ProactiveTask is null");
             }
 
             var task = m_ProactiveTask as Task<ResultType>;
             if (task == null)
             {
-                throw new InvalidOperationException("Unexpected internal error! WaitForProactiveTaskAsync<ResultType> was called when m_ProactiveTask is Task");
+                throw new InvalidOperationException("Unexpected internal error! WaitForProactiveTask<ResultType> was called when m_ProactiveTask is Task");
             }
-            var result = await task.ConfigureAwait(false);
+            var result = task.GetAwaiter().GetResult();
 
             m_ProactiveTask = null;
 
             return result;
         }
 
-        public async Task WaitForProactiveTaskAsync()
+        public void WaitForProactiveTask()
         {
             if (m_ProactiveTask != null)
             {
-                await m_ProactiveTask.ConfigureAwait(false);
+                m_ProactiveTask.GetAwaiter().GetResult();
                 m_ProactiveTask = null;
             }
         }
 
-        public void StartProactiveTask(Func<Task> func)
+        public void StartProactiveTask(Action action)
         {
             if (m_ProactiveTask != null)
             {
                 throw new InvalidOperationException("Unexpected internal error! 'TempFile.StartProactiveTask' was called when another proactive task is in progress...");
             }
 
-            m_ProactiveTask = Task.Run(func, m_CancellationToken);
+            m_ProactiveTask = Task.Run(action, m_CancellationToken);
         }
 
-        public void StartProactiveTask<ResultType>(Func<Task<ResultType>> func)
+        public void StartProactiveTask<ResultType>(Func<ResultType> func)
         {
             if (m_ProactiveTask != null)
             {
