@@ -16,7 +16,7 @@ namespace BigFileSorting.Core
 
         private readonly ProactiveTaskRunner m_ProactiveTaskRunner;
 
-        private bool disposedValue; // To detect redundant calls for 'Dispose'
+        private bool m_DisposedValue; // To detect redundant calls for 'Dispose'
 
         public BigFileWriter(string filePath, Encoding encoding, CancellationToken cancellationToken)
         {
@@ -47,13 +47,13 @@ namespace BigFileSorting.Core
             }
         }
 
-        public void WriteSegmentedFileRecord(SegmentedFileRecord record)
+        public void WriteTempFileRecord(TempFileRecord record)
         {
             m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteSegmentedFileRecordImpl(record));
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteTempFileRecordImpl(record));
         }
 
-        private void WriteSegmentedFileRecordImpl(SegmentedFileRecord record)
+        private void WriteTempFileRecordImpl(TempFileRecord record)
         {
             var str = record.GetStr(m_Encoding);
             m_StreamWriter.WriteLine($"{record.Number}.{str}");
@@ -92,14 +92,14 @@ namespace BigFileSorting.Core
 
         private void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (!m_DisposedValue)
             {
                 if (disposing)
                 {
                     FlushDataAndDisposeFilesImpl();
                 }
 
-                disposedValue = true;
+                m_DisposedValue = true;
             }
         }
 

@@ -23,7 +23,7 @@ namespace BigFileSorting.Core
 
         private volatile bool m_EndOfFile;
 
-        private bool disposedValue; // To detect redundant calls for 'Dispose'
+        private bool m_DisposedValue; // To detect redundant calls for 'Dispose'
 
         public BigFileReader(string filePath, Encoding encoding, CancellationToken cancellationToken)
         {
@@ -104,7 +104,7 @@ namespace BigFileSorting.Core
 
         private void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (!m_DisposedValue)
             {
                 if (disposing)
                 {
@@ -114,7 +114,7 @@ namespace BigFileSorting.Core
                     m_StreamReader.Dispose();
                 }
 
-                disposedValue = true;
+                m_DisposedValue = true;
             }
         }
 

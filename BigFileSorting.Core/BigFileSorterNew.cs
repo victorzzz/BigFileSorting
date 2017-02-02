@@ -198,7 +198,7 @@ namespace BigFileSorting.Core
                         }
                         else
                         {
-                            destinationFile.WriteSegmentedFileRecord(tempFileRecord.Value);
+                            destinationFile.WriteTempFileRecord(tempFileRecord.Value);
                             tempFileRecord = sourceTempFile.ReadRecordToMerge();
                         }
                     }
@@ -209,7 +209,7 @@ namespace BigFileSorting.Core
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
 
-                destinationFile.WriteSegmentedFileRecord(tempFileRecord.Value);
+                destinationFile.WriteTempFileRecord(tempFileRecord.Value);
                 tempFileRecord = sourceTempFile.ReadRecordToMerge();
             }
         }

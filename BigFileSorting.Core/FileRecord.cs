@@ -41,7 +41,7 @@ namespace BigFileSorting.Core
             return String.CompareOrdinal(Str, other.Str);
         }
 
-        public int CompareTo(SegmentedFileRecord other, Encoding encoding)
+        public int CompareTo(TempFileRecord other, Encoding encoding)
         {
             if (Number < other.Number)
             {

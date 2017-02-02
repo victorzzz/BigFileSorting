@@ -7,7 +7,7 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
-    internal struct SegmentedFileRecord
+    internal struct TempFileRecord
     {
         private string m_Str;
 
@@ -24,7 +24,7 @@ namespace BigFileSorting.Core
             return m_Str;
         }
 
-        public SegmentedFileRecord(ulong number, byte[] strAsByteArray)
+        public TempFileRecord(ulong number, byte[] strAsByteArray)
         {
             Number = number;
             StrAsByteArray = strAsByteArray;
@@ -37,7 +37,7 @@ namespace BigFileSorting.Core
             m_Str = null;
         }
 
-        public int CompareTo(SegmentedFileRecord other, Encoding encoding)
+        public int CompareTo(TempFileRecord other, Encoding encoding)
         {
             if (Number < other.Number)
             {

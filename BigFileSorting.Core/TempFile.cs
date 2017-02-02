@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,9 +11,11 @@ namespace BigFileSorting.Core
 {
     internal class TempFile : IFileWritter, IDisposable
     {
-        private bool disposedValue = false; // To detect redundant calls
+        private bool m_DisposedValue = false; // To detect redundant calls
 
         private readonly string m_TempDir;
+
+        private readonly BlockingCollection<>
 
         private FileStream m_DataFile;
         private string m_DataFilePah;
@@ -36,7 +39,7 @@ namespace BigFileSorting.Core
 
             if (m_DataFilePah != null && !m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToNewFile' was called in write mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToNewFile' was called in write mode.");
             }
 
             FlushDataAndDisposeFilesImpl();
@@ -66,7 +69,7 @@ namespace BigFileSorting.Core
         {
             if (m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.WriteSortedSegment' was called in read mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempFile.WriteSortedSegment' was called in read mode.");
             }
 
             foreach(var record in segment)
@@ -94,13 +97,13 @@ namespace BigFileSorting.Core
             record.ClearStr();
         }
 
-        public void WriteSegmentedFileRecord(SegmentedFileRecord record)
+        public void WriteTempFileRecord(TempFileRecord record)
         {
             m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteSegmentedFileRecordImpl(record));
+            m_ProactiveTaskRunner.StartProactiveTask(() => WriteTempFileRecordImpl(record));
         }
 
-        private void WriteSegmentedFileRecordImpl(SegmentedFileRecord record)
+        private void WriteTempFileRecordImpl(TempFileRecord record)
         {
             m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
             m_DataFile.Write(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4);
@@ -114,14 +117,14 @@ namespace BigFileSorting.Core
             m_ProactiveTaskRunner.WaitForProactiveTask();
             SwitchToReadModeImpl();
 
-            m_ProactiveTaskRunner.StartProactiveTask<SegmentedFileRecord?>(() => ReadRecordToMergeImpl());
+            m_ProactiveTaskRunner.StartProactiveTask<TempFileRecord?>(() => ReadRecordToMergeImpl());
         }
 
         private void SwitchToReadModeImpl()
         {
             if (m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.SwitchToReadMode' was called in read mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToReadMode' was called in read mode.");
             }
 
             FlushDataAndDisposeFilesImpl();
@@ -137,13 +140,13 @@ namespace BigFileSorting.Core
             m_ReadMode = true;
         }
 
-        public SegmentedFileRecord? ReadRecordToMerge()
+        public TempFileRecord? ReadRecordToMerge()
         {
-            var result = m_ProactiveTaskRunner.WaitForProactiveTask<SegmentedFileRecord?>();
+            var result = m_ProactiveTaskRunner.WaitForProactiveTask<TempFileRecord?>();
 
             if (result.HasValue)
             {
-                m_ProactiveTaskRunner.StartProactiveTask<SegmentedFileRecord?>(() => ReadRecordToMergeImpl());
+                m_ProactiveTaskRunner.StartProactiveTask<TempFileRecord?>(() => ReadRecordToMergeImpl());
             }
 
             return result;
@@ -153,11 +156,11 @@ namespace BigFileSorting.Core
         /// 
         /// </summary>
         /// <returns>Returns null if end of segment is reached</returns>
-        private SegmentedFileRecord? ReadRecordToMergeImpl()
+        private TempFileRecord? ReadRecordToMergeImpl()
         {
             if (!m_ReadMode)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempSegmentedFile.ReadRecordToMerge' was called in not read mode.");
+                throw new InvalidOperationException("Unexpected internal error! 'TempFile.ReadRecordToMerge' was called in not read mode.");
             }
 
             // read Number
@@ -196,7 +199,7 @@ namespace BigFileSorting.Core
                 throw new InvalidOperationException("Unexpected internal error! Can't read String for the next record of temporary segmented file.");
             }
 
-            return new SegmentedFileRecord(BitConverter.ToUInt64(bufferNumber, 0), bufferString);
+            return new TempFileRecord(BitConverter.ToUInt64(bufferNumber, 0), bufferString);
         }
 
         public void FlushDataAndDisposeFiles()
@@ -234,7 +237,7 @@ namespace BigFileSorting.Core
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (!m_DisposedValue)
             {
                 if (disposing)
                 {
@@ -248,7 +251,7 @@ namespace BigFileSorting.Core
                     }
                 }
 
-                disposedValue = true;
+                m_DisposedValue = true;
             }
         }
 
