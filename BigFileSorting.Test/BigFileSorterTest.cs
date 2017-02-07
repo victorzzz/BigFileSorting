@@ -16,7 +16,7 @@ namespace BigFileSorting.Test
     {
         private const string BIG_SOURCE_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.txt";
         private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
-        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024L * 10L;
+        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024 * 20L;
         private const long TEST_MEMORY_USE = -1;
 
         [TestInitialize]

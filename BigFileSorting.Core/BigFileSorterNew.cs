@@ -38,7 +38,7 @@ namespace BigFileSorting.Core
             IReadOnlyList<string> tempDirs,
             long memoryToUse)
         {
-            Trace.WriteLine("START!");
+            var sw_total = Stopwatch.StartNew();
 
             if (string.IsNullOrWhiteSpace(sourceFilePath))
             {
@@ -56,16 +56,23 @@ namespace BigFileSorting.Core
             }
 
             // check temp dirs
-            tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs, m_CancellationToken);
+            tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs);
 
             if (memoryToUse <= 0)
             {
                 memoryToUse = Memory.GetAvaliablePhisicalMemory();
             }
 
-            Trace.WriteLine($"memoryToUse:{memoryToUse}");
+            Console.WriteLine($"memoryToUse:{memoryToUse}");
 
-            var listStructSize = Marshal.SizeOf(typeof(FileRecord));
+            long memoryForData = memoryToUse / 3 * 2;
+            int listStructSize = Marshal.SizeOf(typeof(FileRecord));
+
+            int listCapasityLimit = Math.Min(
+                (int)(memoryForData / Constants.APROXIMATE_RECORD_SIZE),
+                Constants.MAX_ARRAY_BYTES / listStructSize);
+
+            long segmentSizeLimit = memoryForData - listCapasityLimit * listStructSize;
 
             using (var tempFile0 = new TempFile(tempDirs[0], m_Encoding, m_CancellationToken))
             using (var tempFile1 = new TempFile(tempDirs[1], m_Encoding, m_CancellationToken))
@@ -81,17 +88,11 @@ namespace BigFileSorting.Core
                     {
                         m_CancellationToken.ThrowIfCancellationRequested();
 
-                        var memoryForData = memoryToUse / 4 * 3;
-
-                        var listCapasityLimit = Math.Min(
-                            (int)(memoryForData / Constants.APROXIMATE_RECORD_SIZE),
-                            Constants.MAX_ARRAY_BYTES / listStructSize);
-
-                        var segmentSizeLimit = memoryForData - listCapasityLimit * listStructSize;
-                        var currentSegmentSize = 0;
+                        long currentSegmentSize = 0L;
 
                         var listToSort = new List<FileRecord>(capacity: listCapasityLimit);
 
+                        long n = 0;
                         while(true)
                         {
                             m_CancellationToken.ThrowIfCancellationRequested();
@@ -109,9 +110,23 @@ namespace BigFileSorting.Core
                             {
                                 break;
                             }
+
+                            ++n;
+
+                            if (n == 1000000)
+                            {
+                                GC.Collect(2, GCCollectionMode.Optimized, false, false);
+                                n = 0;
+                            }
                         }
 
+                        GC.Collect(2, GCCollectionMode.Optimized, false, true);
+
+                        Console.Write("Start sorting");
+                        var sw_sort = Stopwatch.StartNew();
                         listToSort.Sort();
+                        sw_sort.Stop();
+                        Console.WriteLine($"Segment sorting time: {sw_sort.Elapsed}");
 
                         m_CancellationToken.ThrowIfCancellationRequested();
 
@@ -149,7 +164,7 @@ namespace BigFileSorting.Core
                             if (firstSegment)
                             {
                                 var targetTempFileLocal = targetTempFile;
-                                targetTempFileLocal.WriteSortedSegment(listToSort);
+                                targetTempFileLocal.WriteOriginalSegment(listToSort);
                             }
                             else
                             {
@@ -168,6 +183,9 @@ namespace BigFileSorting.Core
                     }
                 }
             }
+
+            sw_total.Stop();
+            Console.WriteLine($"Total time: {sw_total.Elapsed}");
         }
 
         private void MergeAndWrite(TempFile sourceTempFile,

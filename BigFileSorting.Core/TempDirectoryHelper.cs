@@ -11,34 +11,7 @@ namespace BigFileSorting.Core
 {
     internal class TempDirectoryHelper
     {
-        internal static bool CheckRootPathUniqueness(IReadOnlyCollection<string> tempDirs, CancellationToken cancellationToken)
-        {
-            var concurrencyLevel = Environment.ProcessorCount * 2;
-            var tempDirsWithRootPaths = new ConcurrentDictionary<string, string>(concurrencyLevel, tempDirs.Count);
-
-            bool result = true;
-            Parallel.ForEach(
-                tempDirs,
-                new ParallelOptions()
-                {
-                    CancellationToken = cancellationToken,
-                    MaxDegreeOfParallelism = concurrencyLevel
-                },
-                (tempDir, state) =>
-                {
-                    var fullPath = Path.GetFullPath(tempDir);
-                    var rootPath = Path.GetPathRoot(fullPath);
-                    if (!tempDirsWithRootPaths.TryAdd(rootPath, tempDir))
-                    {
-                        result = false;
-                        state.Break();
-                    }
-                });
-
-            return result;
-        }
-
-        internal static IReadOnlyList<string> TempDirsToUse(IReadOnlyList<string> tempDirs, CancellationToken cancellationToken)
+        internal static IReadOnlyList<string> TempDirsToUse(IReadOnlyList<string> tempDirs)
         {
             if (tempDirs.Count == 0)
             {
@@ -46,14 +19,7 @@ namespace BigFileSorting.Core
             }
 
             // Check temp directories. It should be placed on different devices
-            if (tempDirs.Count > 1)
-            {
-                if (!CheckRootPathUniqueness(tempDirs, cancellationToken))
-                {
-                    throw new InvalidOperationException("Temp dirs should have unique root paths!");
-                }
-            }
-            else
+            if (tempDirs.Count == 1)
             {
                 // if the only one temporary directory provided than we use three temp files in the same directory
                 tempDirs = new List<string> { tempDirs.First(), tempDirs.First() };

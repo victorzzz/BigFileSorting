@@ -13,5 +13,6 @@ namespace BigFileSorting.Core
         public const long DEFAULT_AVALIABLE_MEMORY = 1024L * 1024L * 1024L * 4L; // 4Gb
         public const double MEMORY_LIMITER_DELAY_SECONDS = 2.0;
         public const int MAX_ARRAY_BYTES = 2146435000;
+        public const int BACKGROUND_FILEOPERATIONS_QUEUE_SIZE = 20;
     }
 }

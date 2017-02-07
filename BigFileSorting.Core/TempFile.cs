@@ -9,13 +9,16 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
-    internal class TempFile : IFileWritter, IDisposable
+    internal class TempFile : FileWriterBase, IFileWritter, IDisposable
     {
         private bool m_DisposedValue = false; // To detect redundant calls
 
         private readonly string m_TempDir;
 
-        private readonly BlockingCollection<>
+        private BlockingCollection<TempFileRecord> m_ReadingCollection;
+        private BlockingCollection<object> m_WritingCollection;
+
+        private Task m_BackgroundTask;
 
         private FileStream m_DataFile;
         private string m_DataFilePah;
@@ -23,31 +26,30 @@ namespace BigFileSorting.Core
         private CancellationToken m_CancellationToken;
         private bool m_ReadMode;
 
-        private ProactiveTaskRunner m_ProactiveTaskRunner;
-
         public TempFile(string tempDir, Encoding encoding, CancellationToken cancellationToken)
         {
             m_TempDir = tempDir;
             m_Encoding = encoding;
             m_CancellationToken = cancellationToken;
-            m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
         }
 
         public void SwitchToNewFile()
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-
-            if (m_DataFilePah != null && !m_ReadMode)
+            if (m_DataFilePah != null)
             {
-                throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToNewFile' was called in write mode.");
+                if ((!m_ReadMode || m_ReadingCollection == null || m_WritingCollection != null))
+                {
+                    throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToNewFile' was called in write mode.");
+                }
+
+                m_ReadingCollection.CompleteAdding();
+                m_BackgroundTask.GetAwaiter().GetResult();
+
+                FlushDataAndDisposeFilesImpl();
+                DeleteFileSafe(m_DataFilePah);
             }
 
-            FlushDataAndDisposeFilesImpl();
-
-            DeleteFileSafe(m_DataFilePah);
-
             m_DataFilePah = Path.Combine(m_TempDir, Path.GetRandomFileName());
-
             m_DataFile = new FileStream(
                 m_DataFilePah,
                 FileMode.CreateNew,
@@ -55,24 +57,25 @@ namespace BigFileSorting.Core
                 FileShare.None,
                 Constants.FILE_BUFFER_SIZE,
                 FileOptions.None);
-
             m_ReadMode = false;
+
+            m_ReadingCollection = null;
+            m_WritingCollection = new BlockingCollection<object>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+
+            m_BackgroundTask = Task.Factory.StartNew(() => Writing(m_CancellationToken, m_WritingCollection),
+                m_CancellationToken,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
         }
 
-        public void WriteSortedSegment(IReadOnlyList<FileRecord> segment)
-        {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            WriteSortedSegmentImpl(segment);
-        }
-
-        private void WriteSortedSegmentImpl(IReadOnlyList<FileRecord> segment)
+        public void WriteOriginalSegment(IReadOnlyList<FileRecord> segment)
         {
             if (m_ReadMode)
             {
                 throw new InvalidOperationException("Unexpected internal error! 'TempFile.WriteSortedSegment' was called in read mode.");
             }
 
-            foreach(var record in segment)
+            foreach (var record in segment)
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
                 WriteOriginalFileRecordImpl(record);
@@ -81,11 +84,10 @@ namespace BigFileSorting.Core
 
         public void WriteOriginalFileRecord(FileRecord record)
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteOriginalFileRecordImpl(record));
+            m_WritingCollection.Add(record);
         }
 
-        private void WriteOriginalFileRecordImpl(FileRecord record)
+        protected override void WriteOriginalFileRecordImpl(FileRecord record)
         {
             m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
 
@@ -99,11 +101,10 @@ namespace BigFileSorting.Core
 
         public void WriteTempFileRecord(TempFileRecord record)
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteTempFileRecordImpl(record));
+            m_WritingCollection.Add(record);
         }
 
-        private void WriteTempFileRecordImpl(TempFileRecord record)
+        protected override void WriteTempFileRecordImpl(TempFileRecord record)
         {
             m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
             m_DataFile.Write(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4);
@@ -114,18 +115,13 @@ namespace BigFileSorting.Core
 
         public void SwitchToReadMode()
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            SwitchToReadModeImpl();
-
-            m_ProactiveTaskRunner.StartProactiveTask<TempFileRecord?>(() => ReadRecordToMergeImpl());
-        }
-
-        private void SwitchToReadModeImpl()
-        {
             if (m_ReadMode)
             {
                 throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToReadMode' was called in read mode.");
             }
+
+            m_WritingCollection.CompleteAdding();
+            m_BackgroundTask.GetAwaiter().GetResult();
 
             FlushDataAndDisposeFilesImpl();
 
@@ -138,15 +134,27 @@ namespace BigFileSorting.Core
                 FileOptions.SequentialScan | FileOptions.DeleteOnClose);
 
             m_ReadMode = true;
+
+            m_WritingCollection = null;
+            m_ReadingCollection = new BlockingCollection<TempFileRecord>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+
+            m_BackgroundTask = Task.Factory.StartNew(Reading,
+                m_CancellationToken,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
         }
 
         public TempFileRecord? ReadRecordToMerge()
         {
-            var result = m_ProactiveTaskRunner.WaitForProactiveTask<TempFileRecord?>();
+            TempFileRecord? result = null;
 
-            if (result.HasValue)
+            try
             {
-                m_ProactiveTaskRunner.StartProactiveTask<TempFileRecord?>(() => ReadRecordToMergeImpl());
+                result = m_ReadingCollection.Take(m_CancellationToken);
+            }
+            catch(InvalidOperationException)
+            {
+
             }
 
             return result;
@@ -204,7 +212,6 @@ namespace BigFileSorting.Core
 
         public void FlushDataAndDisposeFiles()
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
             FlushDataAndDisposeFilesImpl();
         }
 
@@ -230,6 +237,30 @@ namespace BigFileSorting.Core
             catch (Exception)
             {
 
+            }
+        }
+
+        private void Reading()
+        {
+            while (true)
+            {
+                m_CancellationToken.ThrowIfCancellationRequested();
+
+                if (m_ReadingCollection.IsAddingCompleted)
+                {
+                    break;
+                }
+
+                var readResult = ReadRecordToMergeImpl();
+                if (!readResult.HasValue)
+                {
+                    m_ReadingCollection.CompleteAdding();
+                    break;
+                }
+                else
+                {
+                    m_ReadingCollection.Add(readResult.Value, m_CancellationToken);
+                }
             }
         }
 
@@ -260,6 +291,5 @@ namespace BigFileSorting.Core
             Dispose(true);
         }
         #endregion
-
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -8,13 +9,15 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
-    internal class BigFileWriter : IFileWritter, IDisposable
+    internal class BigFileWriter : FileWriterBase, IFileWritter, IDisposable
     {
         private readonly CancellationToken m_CancellationToken;
         private readonly Encoding m_Encoding;
         private StreamWriter m_StreamWriter;
 
-        private readonly ProactiveTaskRunner m_ProactiveTaskRunner;
+        private readonly BlockingCollection<object> m_WritingCollection;
+
+        private readonly Task m_BackgroundTask;
 
         private bool m_DisposedValue; // To detect redundant calls for 'Dispose'
 
@@ -30,17 +33,16 @@ namespace BigFileSorting.Core
                 Constants.FILE_BUFFER_SIZE, FileOptions.None);
 
             m_StreamWriter = new StreamWriter(fileStream, encoding, Constants.FILE_BUFFER_SIZE);
-            m_ProactiveTaskRunner = new ProactiveTaskRunner(cancellationToken);
-        }
-        public void WriteOriginalSegment(IReadOnlyList<FileRecord> segmen)
-        {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteOriginalSegmentImple(segmen));
-        }
 
-        private void WriteOriginalSegmentImple(IReadOnlyList<FileRecord> segment)
+            m_WritingCollection = new BlockingCollection<object>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+            m_BackgroundTask = Task.Factory.StartNew(() => Writing(m_CancellationToken, m_WritingCollection),
+                m_CancellationToken,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+        }
+        public void WriteOriginalSegment(IReadOnlyList<FileRecord> segment)
         {
-            foreach(var record in segment)
+            foreach (var record in segment)
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
                 WriteOriginalFileRecordImpl(record);
@@ -49,11 +51,10 @@ namespace BigFileSorting.Core
 
         public void WriteTempFileRecord(TempFileRecord record)
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteTempFileRecordImpl(record));
+            m_WritingCollection.Add(record);
         }
 
-        private void WriteTempFileRecordImpl(TempFileRecord record)
+        protected override void WriteTempFileRecordImpl(TempFileRecord record)
         {
             var str = record.GetStr(m_Encoding);
             m_StreamWriter.WriteLine($"{record.Number}.{str}");
@@ -62,11 +63,10 @@ namespace BigFileSorting.Core
 
         public void WriteOriginalFileRecord(FileRecord record)
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
-            m_ProactiveTaskRunner.StartProactiveTask(() => WriteOriginalFileRecordImpl(record));
+            m_WritingCollection.Add(record);
         }
 
-        private void WriteOriginalFileRecordImpl(FileRecord record)
+        protected override void WriteOriginalFileRecordImpl(FileRecord record)
         {
             m_StreamWriter.WriteLine($"{record.Number}.{record.Str}");
             record.ClearStr();
@@ -74,7 +74,9 @@ namespace BigFileSorting.Core
 
         public void FlushDataAndDisposeFiles()
         {
-            m_ProactiveTaskRunner.WaitForProactiveTask();
+            m_WritingCollection.CompleteAdding();
+            m_BackgroundTask.GetAwaiter().GetResult();
+
             FlushDataAndDisposeFilesImpl();
         }
 
@@ -87,6 +89,7 @@ namespace BigFileSorting.Core
                 m_StreamWriter = null;
             }
         }
+
 
         #region IDisposable Support
 

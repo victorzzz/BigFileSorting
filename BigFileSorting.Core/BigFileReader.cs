@@ -13,29 +13,25 @@ namespace BigFileSorting.Core
 {
     internal class BigFileReader : IDisposable
     {
-        private const int ReadLinesQueSize = 20;
-
         private readonly StreamReader m_StreamReader;
-        private readonly CancellationToken m_CancellationToken;
+        private readonly CancellationTokenSource m_CancellationTokenSource;
 
         private readonly BlockingCollection<string> m_ReadLinesCollection;
         private readonly Task m_BackgroundReadingTask;
-
-        private volatile bool m_EndOfFile;
 
         private bool m_DisposedValue; // To detect redundant calls for 'Dispose'
 
         public BigFileReader(string filePath, Encoding encoding, CancellationToken cancellationToken)
         {
-            m_CancellationToken = cancellationToken;
+            m_CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, Constants.FILE_BUFFER_SIZE, FileOptions.SequentialScan);
             m_StreamReader = new StreamReader(fileStream, encoding, false, Constants.FILE_BUFFER_SIZE);
 
-            m_ReadLinesCollection = new BlockingCollection<string>(ReadLinesQueSize);
+            m_ReadLinesCollection = new BlockingCollection<string>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
             m_BackgroundReadingTask = Task.Factory.StartNew(
                 ReadLines,
-                m_CancellationToken,
+                m_CancellationTokenSource.Token,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
         }
@@ -44,7 +40,7 @@ namespace BigFileSorting.Core
         {
             while (true)
             {
-                m_CancellationToken.ThrowIfCancellationRequested();
+                m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
 
                 if(m_ReadLinesCollection.IsAddingCompleted)
                 {
@@ -52,18 +48,19 @@ namespace BigFileSorting.Core
                 }
 
                 var str = m_StreamReader.ReadLine();
-                m_ReadLinesCollection.Add(str, m_CancellationToken);
                 if (str == null)
                 {
-                    m_EndOfFile = true;
+                    m_ReadLinesCollection.CompleteAdding();
                     break;
                 }
+
+                m_ReadLinesCollection.Add(str, m_CancellationTokenSource.Token);
             }
         }
 
         public bool EndOfFile()
         {
-            return m_EndOfFile;
+            return m_ReadLinesCollection.IsCompleted;
         }
 
         public FileRecord? ReadRecord()
@@ -82,7 +79,7 @@ namespace BigFileSorting.Core
 
         private string ReadLine()
         {
-            if(m_EndOfFile || m_ReadLinesCollection.IsCompleted)
+            if(m_ReadLinesCollection.IsCompleted)
             {
                 return null;
             }
@@ -90,7 +87,7 @@ namespace BigFileSorting.Core
             string line;
             try
             {
-                line = m_ReadLinesCollection.Take(m_CancellationToken);
+                line = m_ReadLinesCollection.Take(m_CancellationTokenSource.Token);
             }
             catch(InvalidOperationException)
             {
@@ -108,7 +105,7 @@ namespace BigFileSorting.Core
             {
                 if (disposing)
                 {
-                    m_ReadLinesCollection.CompleteAdding();
+                    m_CancellationTokenSource.Cancel();
                     m_BackgroundReadingTask.GetAwaiter().GetResult();
 
                     m_StreamReader.Dispose();
