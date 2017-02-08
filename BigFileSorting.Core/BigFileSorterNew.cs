@@ -195,7 +195,7 @@ namespace BigFileSorting.Core
         {
             sourceTempFile.SwitchToReadMode();
 
-            var tempFileRecord = sourceTempFile.ReadRecordToMerge();
+            var fileRecord = sourceTempFile.ReadRecordToMerge();
 
             foreach (var lastSegmentRecord in lastSegment)
             {
@@ -203,33 +203,33 @@ namespace BigFileSorting.Core
                 {
                     m_CancellationToken.ThrowIfCancellationRequested();
 
-                    if (!tempFileRecord.HasValue)
+                    if (!fileRecord.HasValue)
                     {
-                        destinationFile.WriteOriginalFileRecord(lastSegmentRecord);
+                        destinationFile.WriteFileRecord(lastSegmentRecord);
                         break;
                     }
                     else
                     {
-                        if (lastSegmentRecord.CompareTo(tempFileRecord.Value, m_Encoding) < 0)
+                        if (lastSegmentRecord.CompareTo(fileRecord.Value) < 0)
                         {
-                            destinationFile.WriteOriginalFileRecord(lastSegmentRecord);
+                            destinationFile.WriteFileRecord(lastSegmentRecord);
                             break;
                         }
                         else
                         {
-                            destinationFile.WriteTempFileRecord(tempFileRecord.Value);
-                            tempFileRecord = sourceTempFile.ReadRecordToMerge();
+                            destinationFile.WriteFileRecord(fileRecord.Value);
+                            fileRecord = sourceTempFile.ReadRecordToMerge();
                         }
                     }
                 }
             }
 
-            while(tempFileRecord.HasValue)
+            while(fileRecord.HasValue)
             {
                 m_CancellationToken.ThrowIfCancellationRequested();
 
-                destinationFile.WriteTempFileRecord(tempFileRecord.Value);
-                tempFileRecord = sourceTempFile.ReadRecordToMerge();
+                destinationFile.WriteFileRecord(fileRecord.Value);
+                fileRecord = sourceTempFile.ReadRecordToMerge();
             }
         }
     }

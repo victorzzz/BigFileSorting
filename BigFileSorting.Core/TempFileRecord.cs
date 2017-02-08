@@ -7,52 +7,37 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
+
     public struct TempFileRecord
     {
-        private string m_Str;
+        public string Str { get; private set; }
 
         public ulong Number { get; }
-        public byte[] StrAsByteArray { get; private set; }
+       
 
-        public string GetStr(Encoding encoding)
-        {
-            if (m_Str == null)
-            {
-                m_Str = encoding.GetString(StrAsByteArray);
-            }
-
-            return m_Str;
-        }
-
-        public TempFileRecord(ulong number, byte[] strAsByteArray)
+        public TempFileRecord(ulong number, byte[] strAsByteArray, Encoding encoding)
         {
             Number = number;
-            StrAsByteArray = strAsByteArray;
-            m_Str = null;
+            Str = encoding.GetString(strAsByteArray);
         }
 
         public void ClearStr()
         {
-            StrAsByteArray = null;
-            m_Str = null;
+            Str = null;
         }
 
-        public int CompareTo(TempFileRecord other, Encoding encoding)
+        public int CompareTo(TempFileRecord other)
         {
-            if (Number < other.Number)
+            var strSomparisionResult = String.CompareOrdinal(Str, other.Str);
+
+            if (strSomparisionResult == 0)
             {
-                return -1;
+                return Number.CompareTo(other.Number);
             }
-
-            if (Number > other.Number)
+            else
             {
-                return 1;
+                return strSomparisionResult;
             }
-
-            var thisStr = GetStr(encoding);
-            var otherStr = other.GetStr(encoding);
-
-            return String.CompareOrdinal(thisStr, otherStr);
         }
     }
 }

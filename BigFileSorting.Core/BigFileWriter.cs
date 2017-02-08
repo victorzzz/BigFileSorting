@@ -45,26 +45,11 @@ namespace BigFileSorting.Core
             foreach (var record in segment)
             {
                 m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
-                WriteOriginalFileRecord(record);
+                WriteFileRecord(record);
             }
         }
 
-        public void WriteTempFileRecord(TempFileRecord record)
-        {
-            var str = record.GetStr(m_Encoding);
-            record.ClearStr();
-
-            try
-            {
-                m_WritingCollection.Add($"{record.Number}.{str}");
-            }
-            catch (InvalidOperationException)
-            {
-                throw new InvalidOperationException("Unexpected problem on writing the target file");
-            }
-        }
-
-        public void WriteOriginalFileRecord(FileRecord record)
+        public void WriteFileRecord(FileRecord record)
         {
             try
             {

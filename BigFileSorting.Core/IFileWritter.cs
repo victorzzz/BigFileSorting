@@ -8,8 +8,6 @@ namespace BigFileSorting.Core
 {
     internal interface IFileWritter
     {
-        void WriteTempFileRecord(TempFileRecord record);
-
-        void WriteOriginalFileRecord(FileRecord record);
+        void WriteFileRecord(FileRecord record);
     }
 }

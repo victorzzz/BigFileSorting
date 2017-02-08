@@ -16,8 +16,8 @@ namespace BigFileSorting.Test
     {
         private const string BIG_SOURCE_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.txt";
         private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
-        private const long TEST_FILE_SIZE = 1024L * 1024L * 200L;
-        private const long TEST_MEMORY_USE = -1;
+        private const long TEST_FILE_SIZE = 1024L * 1024L * 500L;
+        private const long TEST_MEMORY_USE = 1024L * 1024L * 100L;
         private const int NUMBER_OF_UNOIQUE_STRINGS_IN_TEST_FILE = 500;
 
         private Dictionary<FileRecord, long> m_CheckCorrectnessDictionary;

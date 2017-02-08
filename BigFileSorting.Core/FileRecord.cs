@@ -21,6 +21,12 @@ namespace BigFileSorting.Core
             Str = str;
         }
 
+        public FileRecord(ulong number, byte[] strAsByteArray, Encoding encoding)
+        {
+            Number = number;
+            Str = encoding.GetString(strAsByteArray);
+        }
+
         public void ClearStr()
         {
             Str = null;
@@ -28,32 +34,16 @@ namespace BigFileSorting.Core
 
         public int CompareTo(FileRecord other)
         {
-            if (Number < other.Number)
+            var strComparisionResult = String.CompareOrdinal(Str, other.Str);
+
+            if (strComparisionResult == 0)
             {
-                return -1;
+                return Number.CompareTo(other.Number);
             }
-
-            if (Number > other.Number)
+            else
             {
-                return 1;
+                return strComparisionResult;
             }
-
-            return String.CompareOrdinal(Str, other.Str);
-        }
-
-        public int CompareTo(TempFileRecord other, Encoding encoding)
-        {
-            if (Number < other.Number)
-            {
-                return -1;
-            }
-
-            if (Number > other.Number)
-            {
-                return 1;
-            }
-
-            return String.CompareOrdinal(Str, other.GetStr(encoding));
         }
     }
 }

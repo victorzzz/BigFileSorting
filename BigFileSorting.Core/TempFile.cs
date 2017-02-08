@@ -6,16 +6,30 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace BigFileSorting.Core
 {
     internal class TempFile : IFileWritter, IDisposable
     {
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct TempFileRecordReadingResult
+        {
+            public ulong Number { get; }
+            public byte[] StrAsByteArray { get; }
+
+            public TempFileRecordReadingResult(ulong number, byte[] strAsByteArray)
+            {
+                Number = number;
+                StrAsByteArray = strAsByteArray;
+            }
+        }
+
         private bool m_DisposedValue = false; // To detect redundant calls
 
         private readonly string m_TempDir;
 
-        private BlockingCollection<TempFileRecord> m_ReadingCollection;
+        private BlockingCollection<TempFileRecordReadingResult> m_ReadingCollection;
         private BlockingCollection<byte[]> m_WritingCollection;
 
         private Task m_BackgroundTask;
@@ -83,11 +97,11 @@ namespace BigFileSorting.Core
             foreach (var record in segment)
             {
                 m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
-                WriteOriginalFileRecord(record);
+                WriteFileRecord(record);
             }
         }
 
-        public void WriteOriginalFileRecord(FileRecord record)
+        public void WriteFileRecord(FileRecord record)
         {
             var strBytes = m_Encoding.GetBytes(record.Str);
             var dataToWrite = new byte[12 + strBytes.Length];
@@ -102,25 +116,6 @@ namespace BigFileSorting.Core
                 m_WritingCollection.Add(dataToWrite);
             }
             catch(InvalidOperationException)
-            {
-                throw new InvalidOperationException($"Unexpected problem on writing file '{m_DataFilePah}'");
-            }
-        }
-
-        public void WriteTempFileRecord(TempFileRecord record)
-        {
-            var dataToWrite = new byte[12 + record.StrAsByteArray.Length];
-            Buffer.BlockCopy(BitConverter.GetBytes(record.Number), 0, dataToWrite, 0, 8);
-            Buffer.BlockCopy(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, dataToWrite, 8, 4);
-            Buffer.BlockCopy(record.StrAsByteArray, 0, dataToWrite, 12, record.StrAsByteArray.Length);
-
-            record.ClearStr();
-
-            try
-            {
-                m_WritingCollection.Add(dataToWrite);
-            }
-            catch (InvalidOperationException)
             {
                 throw new InvalidOperationException($"Unexpected problem on writing file '{m_DataFilePah}'");
             }
@@ -150,7 +145,7 @@ namespace BigFileSorting.Core
             m_ReadMode = true;
 
             m_WritingCollection = null;
-            m_ReadingCollection = new BlockingCollection<TempFileRecord>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+            m_ReadingCollection = new BlockingCollection<TempFileRecordReadingResult>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
 
             m_BackgroundTask = Task.Factory.StartNew(Reading,
                 m_CancellationTokenSource.Token,
@@ -158,13 +153,14 @@ namespace BigFileSorting.Core
                 TaskScheduler.Default);
         }
 
-        public TempFileRecord? ReadRecordToMerge()
+        public FileRecord? ReadRecordToMerge()
         {
-            TempFileRecord? result = null;
+            FileRecord? result = null;
 
             try
             {
-                result = m_ReadingCollection.Take(m_CancellationTokenSource.Token);
+                var tempReadingResult = m_ReadingCollection.Take(m_CancellationTokenSource.Token);
+                return new FileRecord(tempReadingResult.Number, m_Encoding.GetString(tempReadingResult.StrAsByteArray));
             }
             catch(InvalidOperationException)
             {
@@ -178,7 +174,7 @@ namespace BigFileSorting.Core
         /// 
         /// </summary>
         /// <returns>Returns null if end of segment is reached</returns>
-        private TempFileRecord? ReadRecordToMergeImpl()
+        private TempFileRecordReadingResult? ReadRecordToMergeImpl()
         {
             if (!m_ReadMode)
             {
@@ -219,7 +215,7 @@ namespace BigFileSorting.Core
                 throw new InvalidOperationException("Unexpected internal error! Can't read String for the next record of temporary segmented file.");
             }
 
-            return new TempFileRecord(BitConverter.ToUInt64(m_BufferNumber, 0), bufferString);
+            return new TempFileRecordReadingResult(BitConverter.ToUInt64(m_BufferNumber, 0), bufferString);
         }
 
         public void FlushDataAndDisposeFiles()
