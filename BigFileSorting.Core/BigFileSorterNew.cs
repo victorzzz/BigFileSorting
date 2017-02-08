@@ -30,15 +30,15 @@ namespace BigFileSorting.Core
         /// <param name="sourceFilePath"></param>
         /// <param name="targetFilePath"></param>
         /// <param name="tempDirs"></param>
-        /// <param name="memoryToUse"></param>
+        /// <param name="incomingMemoryToUse"></param>
         /// <returns></returns>
         public void Sort(
             string sourceFilePath,
             string targetFilePath,
             IReadOnlyList<string> tempDirs,
-            long memoryToUse)
+            long incomingMemoryToUse)
         {
-            var sw_total = Stopwatch.StartNew();
+            var swTotal = Stopwatch.StartNew();
 
             if (string.IsNullOrWhiteSpace(sourceFilePath))
             {
@@ -57,22 +57,6 @@ namespace BigFileSorting.Core
 
             tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs);
 
-            if (memoryToUse <= 0)
-            {
-                memoryToUse = Memory.GetAvaliablePhisicalMemory();
-            }
-
-            long memoryForData = (long)(memoryToUse * Constants.PART_OF_MEMORY_TO_USE);
-            int listStructSize = Marshal.SizeOf(typeof(FileRecord));
-
-            int listCapasityLimit = Math.Min(
-                (int)(memoryForData / Constants.APROXIMATE_RECORD_SIZE),
-                Constants.MAX_ARRAY_BYTES / listStructSize);
-
-            long segmentSizeLimit = memoryForData - listCapasityLimit * listStructSize;
-
-            Console.WriteLine($"memoryToUse:{memoryToUse}; total GC memory:{GC.GetTotalMemory(true)}; segment size limit:{segmentSizeLimit}");
-
             using (var tempFile0 = new TempFile(tempDirs[0], m_Encoding, m_CancellationToken))
             using (var tempFile1 = new TempFile(tempDirs[1], m_Encoding, m_CancellationToken))
             {
@@ -87,11 +71,27 @@ namespace BigFileSorting.Core
                     {
                         m_CancellationToken.ThrowIfCancellationRequested();
 
-                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false);
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, true);
+
+                        long memoryToUse;
+                        if (incomingMemoryToUse == 0)
+                        {
+                            memoryToUse = Memory.GetAvaliablePhisicalMemory();
+                        }
+                        else
+                        {
+                            memoryToUse = incomingMemoryToUse;
+                        }
+
+                        long memoryForData = (long)(memoryToUse * Constants.PART_OF_MEMORY_TO_USE);
+                        int listStructSize = Marshal.SizeOf(typeof(FileRecord));
+                        int listCapasityLimit = Math.Min(
+                            (int)(memoryForData / Constants.APROXIMATE_RECORD_SIZE),
+                            Constants.MAX_ARRAY_BYTES / listStructSize);
+                        long segmentSizeLimit = memoryForData - listCapasityLimit * listStructSize;
+                        Console.WriteLine($"Before reading next segment. MemoryToUse:{memoryToUse}; total GC memory:{GC.GetTotalMemory(true)}; segment size limit:{segmentSizeLimit}");
 
                         long currentSegmentSize = 0L;
-
-                        Console.WriteLine("Reading new segment to sort.");
                         var listToSort = new List<FileRecord>(capacity: listCapasityLimit);
 
                         while(true)
@@ -116,14 +116,14 @@ namespace BigFileSorting.Core
                         {
                             long totalGCMemory = GC.GetTotalMemory(true);
                             long phisicalMemory = Memory.GetAvaliablePhisicalMemory();
-                            Console.WriteLine($"currentSegmentSize:{currentSegmentSize}; total GC Memory:{totalGCMemory}; phisical memory:{phisicalMemory}");
+                            Console.WriteLine($"Next segment was read!. CurrentSegmentSize:{currentSegmentSize}; total GC Memory:{totalGCMemory}; physical memory:{phisicalMemory}");
                         }
 
                         Console.WriteLine("Start sorting");
-                        var sw_sort = Stopwatch.StartNew();
+                        var swSort = Stopwatch.StartNew();
                         listToSort.Sort();
-                        sw_sort.Stop();
-                        Console.WriteLine($"Segment sorting time: {sw_sort.Elapsed}");
+                        swSort.Stop();
+                        Console.WriteLine($"Segment sorting time: {swSort.Elapsed}");
 
                         m_CancellationToken.ThrowIfCancellationRequested();
 
@@ -185,8 +185,8 @@ namespace BigFileSorting.Core
                 }
             }
 
-            sw_total.Stop();
-            Console.WriteLine($"Total time: {sw_total.Elapsed}");
+            swTotal.Stop();
+            Console.WriteLine($"Total time: {swTotal.Elapsed}");
         }
 
         private void MergeAndWrite(TempFile sourceTempFile,
