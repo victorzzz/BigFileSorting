@@ -16,16 +16,20 @@ namespace BigFileSorting.Test
     {
         private const string BIG_SOURCE_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.txt";
         private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
-        private const long TEST_FILE_SIZE = 1024L * 1024L * 1024 * 20L;
+        private const long TEST_FILE_SIZE = 1024L * 1024L * 200L;
         private const long TEST_MEMORY_USE = -1;
+
+        private Dictionary<FileRecord, long> m_CheckCorrectnessDictionary;
 
         [TestInitialize]
         public void TestInitialize()
         {
-            if(!File.Exists(BIG_SOURCE_FILE_PATH))
+            m_CheckCorrectnessDictionary = new Dictionary<FileRecord, long>(new FileRecordEualityComparer());
+
+            if (!File.Exists(BIG_SOURCE_FILE_PATH))
             {
                 Trace.WriteLine("Generating new file!");
-                BigFileGenerator.Generate(BIG_SOURCE_FILE_PATH, TEST_FILE_SIZE, Encoding.Unicode);
+                BigFileGenerator.Generate(BIG_SOURCE_FILE_PATH, TEST_FILE_SIZE, Encoding.Unicode, m_CheckCorrectnessDictionary);
                 Trace.WriteLine("Generating done!");
 
                 GC.Collect(2, GCCollectionMode.Forced, true, true);
@@ -37,6 +41,8 @@ namespace BigFileSorting.Test
         {
             Trace.WriteLine("Hi!");
 
+
+            // ACT
             var sw = Stopwatch.StartNew();
 
             var sorter = new BigFileSorterNew(CancellationToken.None, Encoding.Unicode);
@@ -50,6 +56,35 @@ namespace BigFileSorting.Test
             sw.Stop();
 
             Trace.WriteLine($"TotalTime: {sw.Elapsed}");
+
+            // ASSERT
+            // check correctness - it should be sorted and contains expected number of item
+
+            FileRecord? previousRecord = null;
+            var destinationCheckDictionary = new Dictionary<FileRecord, long>(new FileRecordEualityComparer());
+
+            using (var fileReader = new BigFileReader(BIG_DESTINATION_FILE_PATH, Encoding.Unicode, CancellationToken.None))
+            {
+                while (true)
+                {
+                    var record = fileReader.ReadRecord();
+
+                    if (!record.HasValue)
+                    {
+                        break;
+                    }
+
+                    if (previousRecord.HasValue)
+                    {
+                        Assert.IsTrue(previousRecord.Value.CompareTo(record.Value) <= 0);
+                    }
+
+                    previousRecord = record;
+                    destinationCheckDictionary.IncrementDictionaryValue<FileRecord>(record.Value, 1);
+                }
+            }
+
+            Assert.IsTrue(m_CheckCorrectnessDictionary.DictionaryEqual(destinationCheckDictionary));
         }
     }
 }

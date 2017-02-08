@@ -7,7 +7,7 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
-    internal struct TempFileRecord
+    public struct TempFileRecord
     {
         private string m_Str;
 

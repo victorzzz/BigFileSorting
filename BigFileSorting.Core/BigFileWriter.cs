@@ -9,13 +9,13 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
-    internal class BigFileWriter : FileWriterBase, IFileWritter, IDisposable
+    internal class BigFileWriter : IFileWritter, IDisposable
     {
-        private readonly CancellationToken m_CancellationToken;
+        private readonly CancellationTokenSource m_CancellationTokenSource;
         private readonly Encoding m_Encoding;
         private StreamWriter m_StreamWriter;
 
-        private readonly BlockingCollection<object> m_WritingCollection;
+        private readonly BlockingCollection<string> m_WritingCollection;
 
         private readonly Task m_BackgroundTask;
 
@@ -23,7 +23,7 @@ namespace BigFileSorting.Core
 
         public BigFileWriter(string filePath, Encoding encoding, CancellationToken cancellationToken)
         {
-            m_CancellationToken = cancellationToken;
+            m_CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             m_Encoding = encoding;
 
             var fileStream = new FileStream(filePath,
@@ -34,9 +34,9 @@ namespace BigFileSorting.Core
 
             m_StreamWriter = new StreamWriter(fileStream, encoding, Constants.FILE_BUFFER_SIZE);
 
-            m_WritingCollection = new BlockingCollection<object>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
-            m_BackgroundTask = Task.Factory.StartNew(() => Writing(m_CancellationToken, m_WritingCollection),
-                m_CancellationToken,
+            m_WritingCollection = new BlockingCollection<string>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+            m_BackgroundTask = Task.Factory.StartNew(Writing,
+                m_CancellationTokenSource.Token,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
         }
@@ -44,33 +44,73 @@ namespace BigFileSorting.Core
         {
             foreach (var record in segment)
             {
-                m_CancellationToken.ThrowIfCancellationRequested();
-                WriteOriginalFileRecordImpl(record);
+                m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
+                WriteOriginalFileRecord(record);
             }
         }
 
         public void WriteTempFileRecord(TempFileRecord record)
         {
-            m_WritingCollection.Add(record);
-        }
-
-        protected override void WriteTempFileRecordImpl(TempFileRecord record)
-        {
             var str = record.GetStr(m_Encoding);
-            m_StreamWriter.WriteLine($"{record.Number}.{str}");
             record.ClearStr();
+
+            try
+            {
+                m_WritingCollection.Add($"{record.Number}.{str}");
+            }
+            catch (InvalidOperationException)
+            {
+                throw new InvalidOperationException("Unexpected problem on writing the target file");
+            }
         }
 
         public void WriteOriginalFileRecord(FileRecord record)
         {
-            m_WritingCollection.Add(record);
-        }
+            try
+            {
+                m_WritingCollection.Add($"{record.Number}.{record.Str}");
+            }
+            catch (InvalidOperationException)
+            {
+                throw new InvalidOperationException("Unexpected problem on writing the target file");
+            }
 
-        protected override void WriteOriginalFileRecordImpl(FileRecord record)
-        {
-            m_StreamWriter.WriteLine($"{record.Number}.{record.Str}");
             record.ClearStr();
         }
+
+        private void Writing()
+        {
+            try
+            {
+                while (true)
+                {
+                    m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                    if (m_WritingCollection.IsAddingCompleted)
+                    {
+                        break;
+                    }
+
+                    string stringToWrite;
+                    try
+                    {
+                        stringToWrite = m_WritingCollection.Take(m_CancellationTokenSource.Token);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        break;
+                    }
+
+                    m_StreamWriter.WriteLine(stringToWrite);
+                }
+            }
+            catch (Exception)
+            {
+                m_WritingCollection.CompleteAdding();
+                throw;
+            }
+        }
+
 
         public void FlushDataAndDisposeFiles()
         {
@@ -99,6 +139,7 @@ namespace BigFileSorting.Core
             {
                 if (disposing)
                 {
+                    m_CancellationTokenSource.Cancel();
                     FlushDataAndDisposeFilesImpl();
                 }
 

@@ -55,7 +55,6 @@ namespace BigFileSorting.Core
                 throw new ArgumentNullException(nameof(tempDirs));
             }
 
-            // check temp dirs
             tempDirs = TempDirectoryHelper.TempDirsToUse(tempDirs);
 
             if (memoryToUse <= 0)
@@ -63,9 +62,7 @@ namespace BigFileSorting.Core
                 memoryToUse = Memory.GetAvaliablePhisicalMemory();
             }
 
-            Console.WriteLine($"memoryToUse:{memoryToUse}");
-
-            long memoryForData = memoryToUse / 3 * 2;
+            long memoryForData = (long)(memoryToUse * Constants.PART_OF_MEMORY_TO_USE);
             int listStructSize = Marshal.SizeOf(typeof(FileRecord));
 
             int listCapasityLimit = Math.Min(
@@ -73,6 +70,8 @@ namespace BigFileSorting.Core
                 Constants.MAX_ARRAY_BYTES / listStructSize);
 
             long segmentSizeLimit = memoryForData - listCapasityLimit * listStructSize;
+
+            Console.WriteLine($"memoryToUse:{memoryToUse}; total GC memory:{GC.GetTotalMemory(true)}; segment size limit:{segmentSizeLimit}");
 
             using (var tempFile0 = new TempFile(tempDirs[0], m_Encoding, m_CancellationToken))
             using (var tempFile1 = new TempFile(tempDirs[1], m_Encoding, m_CancellationToken))
@@ -88,11 +87,13 @@ namespace BigFileSorting.Core
                     {
                         m_CancellationToken.ThrowIfCancellationRequested();
 
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false);
+
                         long currentSegmentSize = 0L;
 
+                        Console.WriteLine("Reading new segment to sort.");
                         var listToSort = new List<FileRecord>(capacity: listCapasityLimit);
 
-                        long n = 0;
                         while(true)
                         {
                             m_CancellationToken.ThrowIfCancellationRequested();
@@ -110,19 +111,15 @@ namespace BigFileSorting.Core
                             {
                                 break;
                             }
-
-                            ++n;
-
-                            if (n == 1000000)
-                            {
-                                GC.Collect(2, GCCollectionMode.Optimized, false, false);
-                                n = 0;
-                            }
                         }
 
-                        GC.Collect(2, GCCollectionMode.Optimized, false, true);
+                        {
+                            long totalGCMemory = GC.GetTotalMemory(true);
+                            long phisicalMemory = Memory.GetAvaliablePhisicalMemory();
+                            Console.WriteLine($"currentSegmentSize:{currentSegmentSize}; total GC Memory:{totalGCMemory}; phisical memory:{phisicalMemory}");
+                        }
 
-                        Console.Write("Start sorting");
+                        Console.WriteLine("Start sorting");
                         var sw_sort = Stopwatch.StartNew();
                         listToSort.Sort();
                         sw_sort.Stop();
@@ -144,11 +141,15 @@ namespace BigFileSorting.Core
                                     // the whole file is already sorted
                                     // we don't need to use any temporary files
                                     // just write it to the destination file
+
+                                    Console.WriteLine("Final writing of sorted segment ... !");
                                     fileWriter.WriteOriginalSegment(listToSort);
                                 }
                                 else
                                 {
                                     ((IDisposable)targetTempFile).Dispose();
+
+                                    Console.WriteLine("Final merging ... !");
                                     MergeAndWrite(sourceTempFile, fileWriter, listToSort);
                                 }
 
@@ -159,24 +160,24 @@ namespace BigFileSorting.Core
                         }
                         else
                         {
+                            Console.WriteLine("Switching to new temp file.");
                             targetTempFile.SwitchToNewFile();
 
                             if (firstSegment)
                             {
-                                var targetTempFileLocal = targetTempFile;
-                                targetTempFileLocal.WriteOriginalSegment(listToSort);
+                                Console.WriteLine("Writing of sorted segment to temp file.");
+                                targetTempFile.WriteOriginalSegment(listToSort);
                             }
                             else
                             {
-                                var sourceTempFileLocal = sourceTempFile;
-                                var targetTempFileLocal = targetTempFile;
-                                MergeAndWrite(sourceTempFileLocal, targetTempFileLocal, listToSort);
+                                Console.WriteLine("Merging to temp file.");
+                                MergeAndWrite(sourceTempFile, targetTempFile, listToSort);
                             }
                         }
 
                         firstSegment = false;
 
-                        Trace.WriteLine("Swapping source and destination temp files");
+                        Console.WriteLine("Swapping source and destination temp files");
                         var t = sourceTempFile;
                         sourceTempFile = targetTempFile;
                         targetTempFile = t;

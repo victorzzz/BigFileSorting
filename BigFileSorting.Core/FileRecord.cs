@@ -10,7 +10,7 @@ using BigFileSorting.Core.Utils;
 namespace BigFileSorting.Core
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal struct FileRecord : IComparable<FileRecord>
+    public struct FileRecord : IComparable<FileRecord>
     {
         public ulong Number { get; }
         public string Str { get; private set; }

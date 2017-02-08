@@ -9,28 +9,32 @@ using System.IO;
 
 namespace BigFileSorting.Core
 {
-    internal class TempFile : FileWriterBase, IFileWritter, IDisposable
+    internal class TempFile : IFileWritter, IDisposable
     {
         private bool m_DisposedValue = false; // To detect redundant calls
 
         private readonly string m_TempDir;
 
         private BlockingCollection<TempFileRecord> m_ReadingCollection;
-        private BlockingCollection<object> m_WritingCollection;
+        private BlockingCollection<byte[]> m_WritingCollection;
 
         private Task m_BackgroundTask;
 
-        private FileStream m_DataFile;
+        private Stream m_DataFileStream;
+
         private string m_DataFilePah;
         private readonly Encoding m_Encoding;
-        private CancellationToken m_CancellationToken;
+        private CancellationTokenSource m_CancellationTokenSource;
         private bool m_ReadMode;
+
+        private readonly byte[] m_BufferNumber = new byte[8];
+        private readonly byte[] m_BufferStringLength = new byte[4];
 
         public TempFile(string tempDir, Encoding encoding, CancellationToken cancellationToken)
         {
             m_TempDir = tempDir;
             m_Encoding = encoding;
-            m_CancellationToken = cancellationToken;
+            m_CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         }
 
         public void SwitchToNewFile()
@@ -50,20 +54,21 @@ namespace BigFileSorting.Core
             }
 
             m_DataFilePah = Path.Combine(m_TempDir, Path.GetRandomFileName());
-            m_DataFile = new FileStream(
-                m_DataFilePah,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                Constants.FILE_BUFFER_SIZE,
-                FileOptions.None);
+            m_DataFileStream = new BufferedStream(
+                new FileStream(
+                    m_DataFilePah,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    Constants.FILE_BUFFER_SIZE,
+                    FileOptions.None));
             m_ReadMode = false;
 
             m_ReadingCollection = null;
-            m_WritingCollection = new BlockingCollection<object>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+            m_WritingCollection = new BlockingCollection<byte[]>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
 
-            m_BackgroundTask = Task.Factory.StartNew(() => Writing(m_CancellationToken, m_WritingCollection),
-                m_CancellationToken,
+            m_BackgroundTask = Task.Factory.StartNew(Writing,
+                m_CancellationTokenSource.Token,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
         }
@@ -77,40 +82,48 @@ namespace BigFileSorting.Core
 
             foreach (var record in segment)
             {
-                m_CancellationToken.ThrowIfCancellationRequested();
-                WriteOriginalFileRecordImpl(record);
+                m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
+                WriteOriginalFileRecord(record);
             }
         }
 
         public void WriteOriginalFileRecord(FileRecord record)
         {
-            m_WritingCollection.Add(record);
-        }
-
-        protected override void WriteOriginalFileRecordImpl(FileRecord record)
-        {
-            m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
-
             var strBytes = m_Encoding.GetBytes(record.Str);
-
-            m_DataFile.Write(BitConverter.GetBytes(strBytes.Length), 0, 4);
-            m_DataFile.Write(strBytes, 0, strBytes.Length);
+            var dataToWrite = new byte[12 + strBytes.Length];
+            Buffer.BlockCopy(BitConverter.GetBytes(record.Number), 0, dataToWrite, 0, 8);
+            Buffer.BlockCopy(BitConverter.GetBytes(strBytes.Length), 0, dataToWrite, 8, 4);
+            Buffer.BlockCopy(strBytes, 0, dataToWrite, 12, strBytes.Length);
 
             record.ClearStr();
+
+            try
+            {
+                m_WritingCollection.Add(dataToWrite);
+            }
+            catch(InvalidOperationException)
+            {
+                throw new InvalidOperationException($"Unexpected problem on writing file '{m_DataFilePah}'");
+            }
         }
 
         public void WriteTempFileRecord(TempFileRecord record)
         {
-            m_WritingCollection.Add(record);
-        }
-
-        protected override void WriteTempFileRecordImpl(TempFileRecord record)
-        {
-            m_DataFile.Write(BitConverter.GetBytes(record.Number), 0, 8);
-            m_DataFile.Write(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, 4);
-            m_DataFile.Write(record.StrAsByteArray, 0, record.StrAsByteArray.Length);
+            var dataToWrite = new byte[12 + record.StrAsByteArray.Length];
+            Buffer.BlockCopy(BitConverter.GetBytes(record.Number), 0, dataToWrite, 0, 8);
+            Buffer.BlockCopy(BitConverter.GetBytes(record.StrAsByteArray.Length), 0, dataToWrite, 8, 4);
+            Buffer.BlockCopy(record.StrAsByteArray, 0, dataToWrite, 12, record.StrAsByteArray.Length);
 
             record.ClearStr();
+
+            try
+            {
+                m_WritingCollection.Add(dataToWrite);
+            }
+            catch (InvalidOperationException)
+            {
+                throw new InvalidOperationException($"Unexpected problem on writing file '{m_DataFilePah}'");
+            }
         }
 
         public void SwitchToReadMode()
@@ -125,13 +138,14 @@ namespace BigFileSorting.Core
 
             FlushDataAndDisposeFilesImpl();
 
-            m_DataFile = new FileStream(
-                m_DataFilePah,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                Constants.FILE_BUFFER_SIZE,
-                FileOptions.SequentialScan | FileOptions.DeleteOnClose);
+            m_DataFileStream = new BufferedStream(
+                new FileStream(
+                    m_DataFilePah,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    Constants.FILE_BUFFER_SIZE,
+                    FileOptions.SequentialScan | FileOptions.DeleteOnClose));
 
             m_ReadMode = true;
 
@@ -139,7 +153,7 @@ namespace BigFileSorting.Core
             m_ReadingCollection = new BlockingCollection<TempFileRecord>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
 
             m_BackgroundTask = Task.Factory.StartNew(Reading,
-                m_CancellationToken,
+                m_CancellationTokenSource.Token,
                 TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
         }
@@ -150,7 +164,7 @@ namespace BigFileSorting.Core
 
             try
             {
-                result = m_ReadingCollection.Take(m_CancellationToken);
+                result = m_ReadingCollection.Take(m_CancellationTokenSource.Token);
             }
             catch(InvalidOperationException)
             {
@@ -172,8 +186,7 @@ namespace BigFileSorting.Core
             }
 
             // read Number
-            byte[] bufferNumber = new byte[8];
-            var bytesRead = m_DataFile.Read(bufferNumber, 0, 8);
+            var bytesRead = m_DataFileStream.Read(m_BufferNumber, 0, 8);
 
             if (bytesRead == 0)
             {
@@ -186,14 +199,13 @@ namespace BigFileSorting.Core
             }
 
             // read string length
-            byte[] bufferStringLength = new byte[4];
-            bytesRead = m_DataFile.Read(bufferStringLength, 0, 4);
+            bytesRead = m_DataFileStream.Read(m_BufferStringLength, 0, 4);
             if (bytesRead != 4)
             {
                 throw new InvalidOperationException("Unexpected internal error! Can't read string length for the next record of temporary segmented file.");
             }
 
-            int stringLength = BitConverter.ToInt32(bufferStringLength, 0);
+            int stringLength = BitConverter.ToInt32(m_BufferStringLength, 0);
             if (stringLength < 0)
             {
                 throw new InvalidOperationException("Unexpected internal error! stringLength < 0 for the next record of temporary segmented file.");
@@ -201,13 +213,13 @@ namespace BigFileSorting.Core
 
             // read string
             byte[] bufferString = new byte[stringLength];
-            bytesRead = m_DataFile.Read(bufferString, 0, stringLength);
+            bytesRead = m_DataFileStream.Read(bufferString, 0, stringLength);
             if (bytesRead != stringLength)
             {
                 throw new InvalidOperationException("Unexpected internal error! Can't read String for the next record of temporary segmented file.");
             }
 
-            return new TempFileRecord(BitConverter.ToUInt64(bufferNumber, 0), bufferString);
+            return new TempFileRecord(BitConverter.ToUInt64(m_BufferNumber, 0), bufferString);
         }
 
         public void FlushDataAndDisposeFiles()
@@ -217,11 +229,11 @@ namespace BigFileSorting.Core
 
         private  void FlushDataAndDisposeFilesImpl()
         {
-            if (m_DataFile != null)
+            if (m_DataFileStream != null)
             {
-                m_DataFile.Flush();
-                m_DataFile.Dispose();
-                m_DataFile = null;
+                m_DataFileStream.Flush();
+                m_DataFileStream.Dispose();
+                m_DataFileStream = null;
             }
         }
 
@@ -242,27 +254,69 @@ namespace BigFileSorting.Core
 
         private void Reading()
         {
-            while (true)
+            try
             {
-                m_CancellationToken.ThrowIfCancellationRequested();
+                while (true)
+                {
+                    m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
 
-                if (m_ReadingCollection.IsAddingCompleted)
-                {
-                    break;
-                }
+                    if (m_ReadingCollection.IsAddingCompleted)
+                    {
+                        break;
+                    }
 
-                var readResult = ReadRecordToMergeImpl();
-                if (!readResult.HasValue)
-                {
-                    m_ReadingCollection.CompleteAdding();
-                    break;
-                }
-                else
-                {
-                    m_ReadingCollection.Add(readResult.Value, m_CancellationToken);
+                    var readResult = ReadRecordToMergeImpl();
+                    if (!readResult.HasValue)
+                    {
+                        m_ReadingCollection.CompleteAdding();
+                        break;
+                    }
+                    else
+                    {
+                        m_ReadingCollection.Add(readResult.Value, m_CancellationTokenSource.Token);
+                    }
                 }
             }
+            catch(Exception)
+            {
+                m_ReadingCollection.CompleteAdding();
+                throw;
+            }
         }
+
+        private void Writing()
+        {
+            try
+            {
+                while (true)
+                {
+                    m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                    if (m_WritingCollection.IsAddingCompleted)
+                    {
+                        break;
+                    }
+
+                    byte[] objectToWrite;
+                    try
+                    {
+                        objectToWrite = m_WritingCollection.Take(m_CancellationTokenSource.Token);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        break;
+                    }
+
+                    m_DataFileStream.Write(objectToWrite, 0, objectToWrite.Length);
+                }
+            }
+            catch (Exception)
+            {
+                m_WritingCollection.CompleteAdding();
+                throw;
+            }
+        }
+
 
         #region IDisposable Support
 
@@ -272,6 +326,7 @@ namespace BigFileSorting.Core
             {
                 if (disposing)
                 {
+                    m_CancellationTokenSource.Cancel();
                     FlushDataAndDisposeFiles();
 
                     if (!m_ReadMode)

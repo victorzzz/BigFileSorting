@@ -38,23 +38,31 @@ namespace BigFileSorting.Core
 
         private void ReadLines()
         {
-            while (true)
+            try
             {
-                m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
-
-                if(m_ReadLinesCollection.IsAddingCompleted)
+                while (true)
                 {
-                    break;
-                }
+                    m_CancellationTokenSource.Token.ThrowIfCancellationRequested();
 
-                var str = m_StreamReader.ReadLine();
-                if (str == null)
-                {
-                    m_ReadLinesCollection.CompleteAdding();
-                    break;
-                }
+                    if (m_ReadLinesCollection.IsAddingCompleted)
+                    {
+                        break;
+                    }
 
-                m_ReadLinesCollection.Add(str, m_CancellationTokenSource.Token);
+                    var str = m_StreamReader.ReadLine();
+                    if (str == null)
+                    {
+                        m_ReadLinesCollection.CompleteAdding();
+                        break;
+                    }
+
+                    m_ReadLinesCollection.Add(str, m_CancellationTokenSource.Token);
+                }
+            }
+            catch(Exception)
+            {
+                m_ReadLinesCollection.CompleteAdding();
+                throw;
             }
         }
 

@@ -12,7 +12,7 @@ namespace BigFileSorting.TestFileGenerator.Core
     {
         private const int NUMBER_OF_UNIQUE_STRINGS = 500;
 
-        public static void Generate(string filePath, long size, Encoding encoding)
+        public static void Generate(string filePath, long size, Encoding encoding, Dictionary<FileRecord, long> dictionaryToCheck)
         {
             var random = new Random(DateTime.Now.Millisecond);
 
@@ -44,6 +44,9 @@ namespace BigFileSorting.TestFileGenerator.Core
                     wrtittenSize += lineToFile.Length * 2;
 
                     streamWriter.WriteLine(lineToFile);
+
+                    var fileRecord = new FileRecord((ulong)number, str);
+                    dictionaryToCheck.IncrementDictionaryValue<FileRecord>(fileRecord, 1);
                 }
             }
         }

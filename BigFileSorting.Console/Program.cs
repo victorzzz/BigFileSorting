@@ -20,7 +20,8 @@ namespace BigFileSorting.Console
 
         static void Main(string[] args)
         {
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => WriteToConsole("UnhandledException", e.ExceptionObject.ToString(), ConsoleColor.Red);
+            AppDomain.CurrentDomain.UnhandledException += (s, e) => 
+            WriteToConsole("UnhandledException", e.ExceptionObject.ToString(), ConsoleColor.Red);
 
             try
             {

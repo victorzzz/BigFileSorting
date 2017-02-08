@@ -1,2 +1,0 @@
-cd G:\My\Git_BigFileSortingTest\BigFileSorting.Console\bin\Release
-BigFileSorting.Console.exe /source_file="F:\BigFileSorterTestData\TestFile.txt" /target_file="G:\BigFileSorterTestData\result.txt" /temp_folder="C:\testtemp" /encoding=unicode
