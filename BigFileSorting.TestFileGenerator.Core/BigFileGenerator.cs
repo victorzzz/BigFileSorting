@@ -10,14 +10,17 @@ namespace BigFileSorting.TestFileGenerator.Core
 {
     public static class BigFileGenerator
     {
-        private const int NUMBER_OF_UNIQUE_STRINGS = 500;
-
-        public static void Generate(string filePath, long size, Encoding encoding, Dictionary<FileRecord, long> dictionaryToCheck)
+        public static void Generate(
+            string filePath,
+            long size,
+            Encoding encoding,
+            Dictionary<FileRecord, long> dictionaryToCheck,
+            int numOfUniqueStrings)
         {
             var random = new Random(DateTime.Now.Millisecond);
 
-            var strings = new List<string>(capacity: NUMBER_OF_UNIQUE_STRINGS);
-            for(int i = 0; i < NUMBER_OF_UNIQUE_STRINGS; ++i)
+            var strings = new List<string>(capacity: numOfUniqueStrings);
+            for(int i = 0; i < numOfUniqueStrings; ++i)
             {
                 var k = random.Next(0, 5);
                 var builder = new StringBuilder(capacity: 40 * k);
@@ -37,7 +40,7 @@ namespace BigFileSorting.TestFileGenerator.Core
                 while (wrtittenSize < size)
                 {
                     var number = Math.BigMul(random.Next(0, 1000), random.Next(0, 1000));
-                    var k = random.Next(0, NUMBER_OF_UNIQUE_STRINGS - 1);
+                    var k = random.Next(0, numOfUniqueStrings - 1);
                     string str = strings[k];
 
                     string lineToFile = $"{number}.{str}";
@@ -46,7 +49,7 @@ namespace BigFileSorting.TestFileGenerator.Core
                     streamWriter.WriteLine(lineToFile);
 
                     var fileRecord = new FileRecord((ulong)number, str);
-                    dictionaryToCheck.IncrementDictionaryValue<FileRecord>(fileRecord, 1);
+                    dictionaryToCheck?.IncrementDictionaryValue<FileRecord>(fileRecord, 1);
                 }
             }
         }

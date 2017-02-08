@@ -18,6 +18,7 @@ namespace BigFileSorting.Test
         private const string BIG_DESTINATION_FILE_PATH = @"f:\BigFileSorterTestData\TestFile.target.txt";
         private const long TEST_FILE_SIZE = 1024L * 1024L * 200L;
         private const long TEST_MEMORY_USE = -1;
+        private const int NUMBER_OF_UNOIQUE_STRINGS_IN_TEST_FILE = 500;
 
         private Dictionary<FileRecord, long> m_CheckCorrectnessDictionary;
 
@@ -29,7 +30,13 @@ namespace BigFileSorting.Test
             if (!File.Exists(BIG_SOURCE_FILE_PATH))
             {
                 Trace.WriteLine("Generating new file!");
-                BigFileGenerator.Generate(BIG_SOURCE_FILE_PATH, TEST_FILE_SIZE, Encoding.Unicode, m_CheckCorrectnessDictionary);
+
+                BigFileGenerator.Generate(
+                    BIG_SOURCE_FILE_PATH,
+                    TEST_FILE_SIZE,
+                    Encoding.Unicode,
+                    m_CheckCorrectnessDictionary, NUMBER_OF_UNOIQUE_STRINGS_IN_TEST_FILE);
+
                 Trace.WriteLine("Generating done!");
 
                 GC.Collect(2, GCCollectionMode.Forced, true, true);
