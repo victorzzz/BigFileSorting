@@ -1,2 +1,2 @@
 cd BigFileSorting.Console\bin\Release
-BigFileSorting.Console.exe /source_file="E:\BigFileSorterTestData\BigTestFile.txt" /target_file="E:\BigFileSorterTestData\BigTestFile_Result.txt" /temp_folder="e:\testtemp" /encoding=unicode
+BigFileSorting.Console.exe /source_file="F:\BigFileSorterTestData\BigTestFile.txt" /target_file="F:\BigFileSorterTestData\BigTestFile_Result.txt" /temp_folder="c:\testtemp" /temp_folder="g:\testtemp" /encoding=unicode

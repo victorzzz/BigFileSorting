@@ -17,7 +17,7 @@ namespace BigFileSorting.Console
     {
         static void Main(string[] args)
         {
-            ConsoleHelper.ExecuteCommandLineTool("Big file sorter", cancelationToken =>
+            ConsoleAppRunner.ExecuteCommandLineTool("Big file sorter", cancelationToken =>
             {
                 var settings = CommandLine.Parse<Settings>();
                 var encoding = Encoding.GetEncoding(settings.EncodingName);

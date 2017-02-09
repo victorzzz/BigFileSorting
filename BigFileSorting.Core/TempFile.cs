@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using System.Runtime.InteropServices;
+using BigFileSorting.Core.Utils;
 
 namespace BigFileSorting.Core
 {
@@ -53,38 +54,46 @@ namespace BigFileSorting.Core
 
         public void SwitchToNewFile()
         {
-            if (m_DataFilePah != null)
+            try
             {
-                if ((!m_ReadMode || m_ReadingCollection == null || m_WritingCollection != null))
+                if (m_DataFilePah != null)
                 {
-                    throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToNewFile' was called in write mode.");
+                    if ((!m_ReadMode || m_ReadingCollection == null || m_WritingCollection != null))
+                    {
+                        throw new InvalidOperationException("Unexpected internal error! 'TempFile.SwitchToNewFile' was called in write mode.");
+                    }
+
+                    m_ReadingCollection.CompleteAdding();
+                    m_BackgroundTask.GetAwaiter().GetResult();
+
+                    FlushDataAndDisposeFilesImpl();
+                    DeleteFileSafe(m_DataFilePah);
                 }
 
-                m_ReadingCollection.CompleteAdding();
-                m_BackgroundTask.GetAwaiter().GetResult();
+                m_DataFilePah = Path.Combine(m_TempDir, Path.GetRandomFileName());
+                m_DataFileStream = new BufferedStream(
+                    new FileStream(
+                        m_DataFilePah,
+                        FileMode.CreateNew,
+                        FileAccess.Write,
+                        FileShare.None,
+                        Constants.FILE_BUFFER_SIZE,
+                        FileOptions.None));
+                m_ReadMode = false;
 
-                FlushDataAndDisposeFilesImpl();
-                DeleteFileSafe(m_DataFilePah);
+                m_ReadingCollection = null;
+                m_WritingCollection = new BlockingCollection<byte[]>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
+
+                m_BackgroundTask = Task.Factory.StartNew(Writing,
+                    m_CancellationTokenSource.Token,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
             }
-
-            m_DataFilePah = Path.Combine(m_TempDir, Path.GetRandomFileName());
-            m_DataFileStream = new BufferedStream(
-                new FileStream(
-                    m_DataFilePah,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
-                    FileShare.None,
-                    Constants.FILE_BUFFER_SIZE,
-                    FileOptions.None));
-            m_ReadMode = false;
-
-            m_ReadingCollection = null;
-            m_WritingCollection = new BlockingCollection<byte[]>(Constants.BACKGROUND_FILEOPERATIONS_QUEUE_SIZE);
-
-            m_BackgroundTask = Task.Factory.StartNew(Writing,
-                m_CancellationTokenSource.Token,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
+            catch(Exception e)
+            {
+                ConsoleHelper.WriteToConsole("TempFile.SwitchToNewFile", $"Exception: '{e.Message}'. Stack trace: {e.StackTrace}");
+                throw;
+            }
         }
 
         public void WriteOriginalSegment(IReadOnlyList<FileRecord> segment)

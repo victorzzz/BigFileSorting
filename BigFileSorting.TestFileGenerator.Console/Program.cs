@@ -14,7 +14,7 @@ namespace BigFileSorting.TestFileGenerator.Console
     {
         static void Main(string[] args)
         {
-            ConsoleHelper.ExecuteCommandLineTool("Test big file generator", cancelationToken =>
+            ConsoleAppRunner.ExecuteCommandLineTool("Test big file generator", cancelationToken =>
             {
                 var settings = CommandLine.Parse<Settings>();
                 var encoding = Encoding.GetEncoding(settings.EncodingName);

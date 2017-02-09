@@ -68,7 +68,10 @@ namespace BigFileSorting.Core
 
         public bool EndOfFile()
         {
-            return m_ReadLinesCollection.IsCompleted;
+            System.Console.WriteLine("BigFiileReader.EndOfFile() called.");
+            var result = m_ReadLinesCollection.IsCompleted;
+            System.Console.WriteLine($"BigFiileReader.EndOfFile() result {result}.");
+            return result;
         }
 
         public FileRecord? ReadRecord()
@@ -113,6 +116,8 @@ namespace BigFileSorting.Core
             {
                 if (disposing)
                 {
+                    System.Console.WriteLine("BigFileReader.Dispose(disposing:true) called");
+
                     m_CancellationTokenSource.Cancel();
                     m_BackgroundReadingTask.GetAwaiter().GetResult();
 
@@ -125,6 +130,7 @@ namespace BigFileSorting.Core
 
         void IDisposable.Dispose()
         {
+            System.Console.WriteLine("BigFileReader.Dispose() called");
             Dispose(true);
         }
 
